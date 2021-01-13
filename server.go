@@ -5,6 +5,9 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
+
 	"context"
 	"flag"
 	"fmt"
@@ -19,9 +22,11 @@ import (
 
 var ApplicationDescription = "Nginx Mail Auth HTTP Server"
 var BuildVersion = "0.0.0"
+var DB *sql.DB
 
 type handleSignalParamsStruct struct {
 	httpServer http.Server
+	db         *sql.DB
 }
 
 type authResultStruct struct {
@@ -47,7 +52,23 @@ var handleSignalParams = handleSignalParamsStruct{}
 
 // }
 
+type ID struct {
+	ID int `json:"id"`
+}
+
 func authenticate(user string, pass string) (success bool, result authResultStruct, err error) {
+
+	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ?", user)
+	defer queryResult.Close()
+
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Error while preparing query: %v", err)
+	}
+
+	if queryResult.Next() {
+		log.Debug().Msgf("Found results for '%s':'%s'", user, pass)
+	}
+
 	result = authResultStruct{
 		AuthStatus: "ok",
 		AuthServer: "ok",
@@ -67,6 +88,7 @@ func handleSignal() {
 		<-signalChannel
 
 		err := handleSignalParams.httpServer.Shutdown(context.Background())
+		defer handleSignalParams.db.Close()
 
 		if err != nil {
 			log.Fatal().Err(err).Msgf("HTTP server Shutdown: %v", err)
@@ -146,6 +168,26 @@ func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	log.Debug().Msg("Logger initialised")
 
+	mysqlConnectionURI := os.Getenv("MYSQL_URI")
+	db, err := sql.Open("mysql", mysqlConnectionURI)
+	if err != nil {
+		log.Fatal().Msgf("Error while initialising db: %v", err)
+	}
+
+	DB = db
+	handleSignalParams.db = DB
+
+	if err := DB.Ping(); err != nil {
+		log.Fatal().
+			Err(err).
+			Str("stage", "init").
+			Msgf("Error while pinging db: %v", err)
+	} else {
+		log.Info().
+			Str("stage", "init").
+			Msg("Database ping ok")
+	}
+
 	handleSignal()
 }
 
@@ -164,6 +206,12 @@ func main() {
 	}
 
 	log.Debug().Msg("New Relic initialised")
+
+	if err := DB.Ping(); err != nil {
+		log.Fatal().Err(err).Msgf("Error while pinging db: %v", err)
+	} else {
+		log.Info().Msg("Database ping ok")
+	}
 
 	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
 	portPtr := flag.String("port", "8080", "Port to listen")
