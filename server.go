@@ -30,10 +30,11 @@ type handleSignalParamsStruct struct {
 }
 
 type authResultStruct struct {
-	AuthStatus string
-	AuthServer string
-	AuthPort   string
-	AuthWait   string
+	AuthStatus    string
+	AuthServer    string
+	AuthPort      string
+	AuthWait      string
+	AuthErrorCode string
 }
 
 var handleSignalParams = handleSignalParamsStruct{}
@@ -58,23 +59,41 @@ type ID struct {
 
 func authenticate(user string, pass string) (success bool, result authResultStruct, err error) {
 
-	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ?", user)
+	result = authResultStruct{}
+
+	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ? and password = SHA2(?, 256) and is_active = 1", user, pass)
 	defer queryResult.Close()
 
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Error while preparing query: %v", err)
+		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
+
+		result.AuthStatus = "Temporary server problem, try again later"
+		result.AuthErrorCode = "451 4.3.0"
+		result.AuthWait = "5"
+
+		return false, result, err
 	}
 
-	if queryResult.Next() {
+	for queryResult.Next() {
 		log.Debug().Msgf("Found results for '%s':'%s'", user, pass)
+
+		var id ID
+
+		if err = queryResult.Scan(&id.ID); err != nil {
+			log.Fatal().Err(err).Msgf("Error while scanning query results: %v", err)
+
+		} else {
+			log.Debug().Msgf("Successfully scanned query results")
+		}
+
+		log.Info().Msgf("Found id: %x", id.ID)
+
 	}
 
-	result = authResultStruct{
-		AuthStatus: "ok",
-		AuthServer: "ok",
-		AuthPort:   "ok",
-		AuthWait:   "ok",
-	}
+	result.AuthStatus = "ok"
+	result.AuthServer = "ok"
+	result.AuthPort = "ok"
+	result.AuthWait = "ok"
 
 	return true, result, nil
 }
@@ -140,6 +159,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		Str("AuthServer", result.AuthServer).
 		Str("AuthPort", result.AuthPort).
 		Str("AuthWait", result.AuthWait).
+		Str("AuthErrorCode", result.AuthErrorCode).
 		Str("event", "auth_result").
 		Msgf("Received auth result for '%s':'%s'", authUser, authPass)
 
@@ -160,6 +180,10 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 			Msgf("Access denied '%s':'%s'", authUser, authPass)
 
 		rw.Header().Set("Auth-Wait", result.AuthWait)
+
+		// if result.AuthErrorCode != nil {
+		rw.Header().Set("Auth-Error-Code", result.AuthErrorCode)
+		// }
 	}
 
 }
