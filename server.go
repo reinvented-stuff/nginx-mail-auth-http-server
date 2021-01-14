@@ -62,7 +62,6 @@ func authenticate(user string, pass string) (success bool, result authResultStru
 	result = authResultStruct{}
 
 	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ? and password = SHA2(?, 256) and is_active = 1", user, pass)
-	defer queryResult.Close()
 
 	if err != nil {
 		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
@@ -74,6 +73,8 @@ func authenticate(user string, pass string) (success bool, result authResultStru
 		return false, result, err
 	}
 
+	defer queryResult.Close()
+
 	for queryResult.Next() {
 		log.Debug().Msgf("Found results for '%s':'%s'", user, pass)
 
@@ -82,20 +83,31 @@ func authenticate(user string, pass string) (success bool, result authResultStru
 		if err = queryResult.Scan(&id.ID); err != nil {
 			log.Fatal().Err(err).Msgf("Error while scanning query results: %v", err)
 
+			result.AuthStatus = "Temporary server problem, try again later"
+			result.AuthErrorCode = "451 4.3.0"
+			result.AuthWait = "5"
+
+			return false, result, err
+
 		} else {
 			log.Debug().Msgf("Successfully scanned query results")
 		}
 
 		log.Info().Msgf("Found id: %x", id.ID)
 
+		result.AuthStatus = "OK"
+		result.AuthServer = "127.0.0.1"
+		result.AuthPort = "25"
+
+		return true, result, nil
+
 	}
 
-	result.AuthStatus = "ok"
-	result.AuthServer = "ok"
-	result.AuthPort = "ok"
-	result.AuthWait = "ok"
+	result.AuthStatus = "Authentication failed"
+	result.AuthErrorCode = "530 5.7.1"
+	result.AuthWait = "5"
 
-	return true, result, nil
+	return false, result, nil
 }
 
 func handleSignal() {
@@ -181,9 +193,9 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 
 		rw.Header().Set("Auth-Wait", result.AuthWait)
 
-		// if result.AuthErrorCode != nil {
-		rw.Header().Set("Auth-Error-Code", result.AuthErrorCode)
-		// }
+		if result.AuthErrorCode != "" {
+			rw.Header().Set("Auth-Error-Code", result.AuthErrorCode)
+		}
 	}
 
 }
