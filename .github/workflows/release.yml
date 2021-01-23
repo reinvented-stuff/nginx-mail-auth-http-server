@@ -421,7 +421,6 @@ jobs:
           sudo dpkg -i "${{steps.verify_deb_package.outputs.path_to_deb_file}}"
           ls -la /usr/bin/nginx-mail-auth-http-server
           ls -la /usr/share/doc/nginx-mail-auth-http-server*
-          nginx-mail-auth-http-server -h
 
       - name: Create a new tag
         if: >
