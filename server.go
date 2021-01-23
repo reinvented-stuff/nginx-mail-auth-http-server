@@ -23,6 +23,11 @@ var ApplicationDescription = "Nginx Mail Auth HTTP Server"
 var BuildVersion = "0.0.0"
 var DB *sql.DB
 
+type flagParamsStruct struct {
+	address string
+	port    string
+}
+
 type handleSignalParamsStruct struct {
 	httpServer http.Server
 	db         *sql.DB
@@ -37,6 +42,7 @@ type authResultStruct struct {
 }
 
 var handleSignalParams = handleSignalParamsStruct{}
+var flagParams = flagParamsStruct{}
 
 // func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
 
@@ -220,6 +226,21 @@ func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	log.Debug().Msg("Logger initialised")
 
+	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
+	portPtr := flag.String("port", "8080", "Port to listen")
+	// configPtr := flag.String("config", "server.conf", "Path to configuration file")
+	showVersionPtr := flag.Bool("version", false, "Show version")
+
+	flag.Parse()
+	flagParams.address = *addressPtr
+	flagParams.port = *portPtr
+
+	if *showVersionPtr {
+		fmt.Printf("%s\n", ApplicationDescription)
+		fmt.Printf("Version: %s\n", BuildVersion)
+		os.Exit(0)
+	}
+
 	mysqlConnectionURI := os.Getenv("MYSQL_URI")
 	db, err := sql.Open("mysql", mysqlConnectionURI)
 	if err != nil {
@@ -253,25 +274,12 @@ func main() {
 		log.Info().Msg("Database ping ok")
 	}
 
-	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
-	portPtr := flag.String("port", "8080", "Port to listen")
-	// configPtr := flag.String("config", "server.conf", "Path to configuration file")
-	showVersionPtr := flag.Bool("version", false, "Show version")
-
-	flag.Parse()
-
-	if *showVersionPtr {
-		fmt.Printf("%s\n", ApplicationDescription)
-		fmt.Printf("Version: %s\n", BuildVersion)
-		os.Exit(0)
-	}
-
 	// ReadConfigurationFile(*configPtr, &Configuration)
 
 	var listenAddress strings.Builder
-	listenAddress.WriteString(*addressPtr)
+	listenAddress.WriteString(flagParams.address)
 	listenAddress.WriteString(":")
-	listenAddress.WriteString(*portPtr)
+	listenAddress.WriteString(flagParams.port)
 
 	srv := &http.Server{
 		Addr:         listenAddress.String(),
