@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -24,19 +23,26 @@ var ApplicationDescription = "Nginx Mail Auth HTTP Server"
 var BuildVersion = "0.0.0"
 var DB *sql.DB
 
+type flagParamsStruct struct {
+	address string
+	port    string
+}
+
 type handleSignalParamsStruct struct {
 	httpServer http.Server
 	db         *sql.DB
 }
 
 type authResultStruct struct {
-	AuthStatus string
-	AuthServer string
-	AuthPort   string
-	AuthWait   string
+	AuthStatus    string
+	AuthServer    string
+	AuthPort      string
+	AuthWait      string
+	AuthErrorCode string
 }
 
 var handleSignalParams = handleSignalParamsStruct{}
+var flagParams = flagParamsStruct{}
 
 // func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
 
@@ -56,27 +62,70 @@ type ID struct {
 	ID int `json:"id"`
 }
 
-func authenticate(user string, pass string) (success bool, result authResultStruct, err error) {
+func authenticate(user string, pass string, protocol string, mailFrom string, mailTo string) (success bool, result authResultStruct, err error) {
 
-	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ?", user)
-	defer queryResult.Close()
+	result = authResultStruct{}
+
+	if user == "" &&
+		pass == "" &&
+		mailFrom != "" &&
+		mailTo != "" {
+		log.Info().Msg("Authenticating inbound mail")
+		log.Debug().
+			Str("user", user).
+			Str("pass", pass).
+			Str("protocol", protocol).
+			Str("mailFrom", mailFrom).
+			Str("mailTo", mailTo)
+	}
+
+	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ? and password = SHA2(?, 256) and is_active = 1", user, pass)
 
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Error while preparing query: %v", err)
+		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
+
+		result.AuthStatus = "Temporary server problem, try again later"
+		result.AuthErrorCode = "451 4.3.0"
+		result.AuthWait = "5"
+
+		return false, result, err
 	}
 
-	if queryResult.Next() {
+	defer queryResult.Close()
+
+	for queryResult.Next() {
 		log.Debug().Msgf("Found results for '%s':'%s'", user, pass)
+
+		var id ID
+
+		if err = queryResult.Scan(&id.ID); err != nil {
+			log.Fatal().Err(err).Msgf("Error while scanning query results: %v", err)
+
+			result.AuthStatus = "Temporary server problem, try again later"
+			result.AuthErrorCode = "451 4.3.0"
+			result.AuthWait = "5"
+
+			return false, result, err
+
+		} else {
+			log.Debug().Msgf("Successfully scanned query results")
+		}
+
+		log.Info().Msgf("Found id: %x", id.ID)
+
+		result.AuthStatus = "OK"
+		result.AuthServer = "127.0.0.1"
+		result.AuthPort = "25"
+
+		return true, result, nil
+
 	}
 
-	result = authResultStruct{
-		AuthStatus: "ok",
-		AuthServer: "ok",
-		AuthPort:   "ok",
-		AuthWait:   "ok",
-	}
+	result.AuthStatus = "Error: authentication failed."
+	result.AuthErrorCode = "535 5.7.8"
+	result.AuthWait = "5"
 
-	return true, result, nil
+	return false, result, nil
 }
 
 func handleSignal() {
@@ -115,6 +164,8 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	authLoginAttempt := req.Header.Get("Auth-Login-Attempt")
 	clientIP := req.Header.Get("Client-IP")
 	clientHost := req.Header.Get("Client-Host")
+	clientSMTPFrom := req.Header.Get("Client-SMTP-From")
+	clientSMTPTo := req.Header.Get("Client-SMTP-To")
 
 	log.Info().
 		Str("authMethod", authMethod).
@@ -124,10 +175,12 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		Str("authLoginAttempt", authLoginAttempt).
 		Str("clientIP", clientIP).
 		Str("clientHost", clientHost).
+		Str("clientSMTPFrom", clientSMTPFrom).
+		Str("clientSMTPTo", clientSMTPTo).
 		Str("event", "auth").
 		Msgf("Incoming auth request")
 
-	success, result, err := authenticate(authUser, authPass)
+	success, result, err := authenticate(authUser, authPass, authProtocol, clientSMTPFrom, clientSMTPTo)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -140,6 +193,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		Str("AuthServer", result.AuthServer).
 		Str("AuthPort", result.AuthPort).
 		Str("AuthWait", result.AuthWait).
+		Str("AuthErrorCode", result.AuthErrorCode).
 		Str("event", "auth_result").
 		Msgf("Received auth result for '%s':'%s'", authUser, authPass)
 
@@ -160,6 +214,10 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 			Msgf("Access denied '%s':'%s'", authUser, authPass)
 
 		rw.Header().Set("Auth-Wait", result.AuthWait)
+
+		if result.AuthErrorCode != "" {
+			rw.Header().Set("Auth-Error-Code", result.AuthErrorCode)
+		}
 	}
 
 }
@@ -167,6 +225,21 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	log.Debug().Msg("Logger initialised")
+
+	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
+	portPtr := flag.String("port", "8080", "Port to listen")
+	// configPtr := flag.String("config", "server.conf", "Path to configuration file")
+	showVersionPtr := flag.Bool("version", false, "Show version")
+
+	flag.Parse()
+	flagParams.address = *addressPtr
+	flagParams.port = *portPtr
+
+	if *showVersionPtr {
+		fmt.Printf("%s\n", ApplicationDescription)
+		fmt.Printf("Version: %s\n", BuildVersion)
+		os.Exit(0)
+	}
 
 	mysqlConnectionURI := os.Getenv("MYSQL_URI")
 	db, err := sql.Open("mysql", mysqlConnectionURI)
@@ -195,43 +268,18 @@ func main() {
 
 	log.Info().Msg("Strating server...")
 
-	newrelicApp, err := newrelic.NewApplication(
-		newrelic.ConfigAppName(ApplicationDescription),
-		newrelic.ConfigLicense(os.Getenv("NEWRELIC_LICENSE")),
-		newrelic.ConfigDistributedTracerEnabled(true),
-	)
-
-	if err != nil {
-		log.Fatal().Msgf("Error while initialising New Relic: %v", err)
-	}
-
-	log.Debug().Msg("New Relic initialised")
-
 	if err := DB.Ping(); err != nil {
 		log.Fatal().Err(err).Msgf("Error while pinging db: %v", err)
 	} else {
 		log.Info().Msg("Database ping ok")
 	}
 
-	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
-	portPtr := flag.String("port", "8080", "Port to listen")
-	// configPtr := flag.String("config", "server.conf", "Path to configuration file")
-	showVersionPtr := flag.Bool("version", false, "Show version")
-
-	flag.Parse()
-
-	if *showVersionPtr {
-		fmt.Printf("%s\n", ApplicationDescription)
-		fmt.Printf("Version: %s\n", BuildVersion)
-		os.Exit(0)
-	}
-
 	// ReadConfigurationFile(*configPtr, &Configuration)
 
 	var listenAddress strings.Builder
-	listenAddress.WriteString(*addressPtr)
+	listenAddress.WriteString(flagParams.address)
 	listenAddress.WriteString(":")
-	listenAddress.WriteString(*portPtr)
+	listenAddress.WriteString(flagParams.port)
 
 	srv := &http.Server{
 		Addr:         listenAddress.String(),
@@ -241,8 +289,8 @@ func main() {
 
 	handleSignalParams.httpServer = *srv
 
-	http.HandleFunc(newrelic.WrapHandleFunc(newrelicApp, "/", handlerIndex))
-	http.HandleFunc(newrelic.WrapHandleFunc(newrelicApp, "/auth", handlerAuth))
+	http.HandleFunc("/", handlerIndex)
+	http.HandleFunc("/auth", handlerAuth)
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal().Err(err).Msgf("HTTP server ListenAndServe: %v", err)
