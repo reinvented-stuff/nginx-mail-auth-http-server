@@ -1,0 +1,379 @@
+name: Everything
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  validate_new_version:
+    name: Validate new version
+    runs-on: ubuntu-latest
+    outputs:
+      planned_version: ${{ steps.planned_version.outputs.planned_version }}
+      tag_hash: ${{ steps.lookup_tag.outputs.tag_hash }}
+      can_create: ${{ steps.can_create.outputs.can_create }}
+      tag_exists: ${{ steps.can_create.outputs.tag_exists }}
+      branch_name: ${{ steps.get_branch_name.outputs.branch_name }}
+      job_status: ${{ job.status }}
+
+    steps:
+
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get trigger branch name
+        id: get_branch_name
+        shell: bash
+        run: |
+          echo "::set-output name=branch_name::${GITHUB_REF#refs/heads/}"
+
+      - name: Check if .version file exists
+        id: version_file_exists
+        run: |
+          if [[ -f .version ]]; then 
+            echo "::set-output name=version_file_exists::true"
+          else 
+            echo "::set-output name=version_file_exists::false" 
+          fi
+
+      - name: Read out .version file
+        if: steps.version_file_exists.outputs.version_file_exists == 'true'
+        id: planned_version
+        run: echo "::set-output name=planned_version::$(cat .version)"
+
+      - name: Display planned version
+        id: display_planned_version
+        run: |
+          echo "::debug::Planned version: ${{ steps.planned_version.outputs.planned_version }}"
+
+      - name: Lookup planned tag
+        id: lookup_tag
+        run: |
+          URL="https://api.github.com/repos/${{ github.repository }}/git/refs/tags/${{ steps.planned_version.outputs.planned_version }}"
+          OUTFILE=".tag_hash"
+          curl -s -X GET -H 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' --url "${URL}" | jq .object.sha | tee "${OUTFILE}"
+          echo "::set-output name=tag_hash::$(cat "${OUTFILE}")"
+      
+      - name: Define if can create a new version
+        id: can_create
+        if: steps.lookup_tag.outputs.tag_hash == 'null'
+        run: |
+          echo "::set-output name=tag_exists::false"
+          echo "::set-output name=can_create::true"
+
+  build_and_test:
+    name: Build, Test
+    runs-on: ubuntu-latest
+    outputs:
+      job_status: ${{ job.status }}
+      filename: ${{ steps.artifact_meta.outputs.filename }}
+
+    needs: 
+      - validate_new_version
+
+    env:
+      PLANNED_VERSION: ${{ needs.validate_new_version.outputs.planned_version }}
+      TAG_HASH: ${{ needs.validate_new_version.outputs.tag_hash }}
+      CAN_CREATE_RELEASE: ${{ needs.validate_new_version.outputs.can_create }}
+      TAG_EXISTS: ${{ needs.validate_new_version.outputs.tag_exists }}
+      BRANCH_NAME: ${{ needs.validate_new_version.outputs.branch_name }}
+      APP_NAME: "nginx-mail-auth-http-server"
+      TARGETOS: "linux"
+      TARGETARCH: "amd64"
+
+    if: >
+      github.event_name == 'push'
+    
+    steps:
+
+      - name: Validate envionment variables
+        id: validate_envvars
+        shell: bash
+        run: |
+          [[ ! -z "PLANNED_VERSION" ]] || exit 2
+          [[ ! -z "TAG_HASH" ]] || exit 2
+          [[ ! -z "CAN_CREATE_RELEASE" ]] || exit 2
+          [[ ! -z "TAG_EXISTS" ]] || exit 2
+          [[ ! -z "BRANCH_NAME" ]] || exit 2
+
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.14
+
+      - name: Define expected artifact name
+        id: artifact_meta
+        shell: bash
+        run: |
+          echo "::set-output name=filename::${APP_NAME}-${PLANNED_VERSION}-linux.x86_64.bin"
+
+      - name: Build
+        run: >
+          GOOS="${TARGETOS}"
+          GOARCH="${TARGETARCH}"
+          go build 
+          -ldflags="-X 'main.buildVersion=${PLANNED_VERSION}'"
+          -v 
+          -o app 
+          .
+
+      - name: Validate build artifact exists
+        id: validate_artifact_exists
+        shell: bash
+        run: |
+          ls -laht "${{ steps.artifact_meta.outputs.filename }}"
+
+      - name: Upload a Build Artifact
+        id: upload_artifact
+        uses: actions/upload-artifact@v2.2.2
+        with:
+          name: "${{ steps.artifact_meta.outputs.filename }}"
+          path: "${{ steps.artifact_meta.outputs.filename }}"
+          retention-days: 30
+
+      - name: Login to Docker registry
+        id: docker_registry_login
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u "${{ github.actor }}" --password-stdin
+
+      - name: Define version suffix
+        id: version_suffix
+        run: |
+          if [[ "${BRANCH_NAME}" == "master" ]]; then
+            short_suffix=""
+            long_suffix=""
+          else
+            short_suffix="${BRANCH_NAME:0:1}"
+            long_suffix="${BRANCH_NAME}"
+          fi
+
+          echo "::set-output name=short::${short_suffix}"
+          echo "::set-output name=long::${long_suffix}"
+
+      - name: Build Docker image
+        id: build_docker_image
+        shell: bash
+        run: >
+          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          
+          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+
+          echo "IMAGE_ID=${IMAGE_ID}"
+          
+          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+
+          docker build
+          --tag "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --build-arg BUILD_VERSION="${PLANNED_VERSION}"
+          --file docker/no_build/Dockerfile
+          .
+
+      - name: Push Docker image to registry
+        run: |
+          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+
+          echo "IMAGE_ID=${IMAGE_ID}"
+          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          
+          docker push "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      job_status: ${{ job.status }}
+   
+    needs: 
+      - validate_new_version
+      - build_and_test
+
+    env:
+      PLANNED_VERSION: ${{ needs.validate_new_version.outputs.planned_version }}
+      TAG_HASH: ${{ needs.validate_new_version.outputs.tag_hash }}
+      CAN_CREATE_RELEASE: ${{ needs.validate_new_version.outputs.can_create }}
+      TAG_EXISTS: ${{ needs.validate_new_version.outputs.tag_exists }}
+      BRANCH_NAME: ${{ needs.validate_new_version.outputs.branch_name }}
+      ARTIFACT_NAME: ${{ needs.build_and_test.outputs.filename }}
+      APP_NAME: "nginx-mail-auth-http-server"
+
+    if: >
+      needs.validate_new_version.outputs.can_create == 'true' &&
+      needs.validate_new_version.outputs.branch_name == 'master' &&
+      github.event_name == 'push'
+
+    steps:
+
+      - name: Validate envionment variables
+        id: validate_envvars
+        shell: bash
+        run: |
+          [[ ! -z "${{ env.PLANNED_VERSION }}" ]] || exit 2
+          [[ ! -z "${{ env.TAG_HASH }}" ]] || exit 2
+          [[ ! -z "${{ env.CAN_CREATE_RELEASE }}" ]] || exit 2
+          [[ ! -z "${{ env.TAG_EXISTS }}" ]] || exit 2
+          [[ ! -z "${{ env.BRANCH_NAME }}" ]] || exit 2
+          [[ ! -z "${{ env.ARTIFACT_NAME }}" ]] || exit 2
+
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Download artifact
+        id: download_artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: "${{ env.ARTIFACT_NAME }}"
+
+      - name: Define full path to downloaded artifact
+        id: artifact_meta
+        shell: bash
+        run: |
+          echo "::set-output name=full_path::${{ steps.download_artifact.outputs.download-path }}/${{ env.ARTIFACT_NAME }}"
+
+      - name: Validate downloaded artifact
+        id: validate_artifact_exists
+        shell: bash
+        run: |
+          ls -la "${{ steps.download_artifact.outputs.download-path }}/${{ env.ARTIFACT_NAME }}"
+
+      - name: Generate changelog
+        id: generate_changelog
+        shell: bash
+        run: |
+          described=$(git describe --tags || git rev-list --max-parents=0 HEAD)
+          described_parts=( ${described//-/ } )
+          current_tag=${described_parts[0]}
+          
+          changelog_filename=".changelog"
+          release_changelog_filename=".release_changelog"
+          echo "current_tag=${current_tag}"
+
+          echo "Listing current changes..."
+          git log --pretty=oneline --format='%w(1000)* %cd %an <%ae>%n%w(60,0,2)- %s%n' --date="format:%a %b %d %Y" "$current_tag"..HEAD | tee "${changelog_filename}"
+          git log --pretty=oneline --format='%w(200,0,2)- %s (%an <%ae>)' --date="format:%a %b %d %Y" "$current_tag"..HEAD | sort | tee "${release_changelog_filename}"
+          
+          echo "Changelog file..."
+          cat .changelog
+
+          echo "Preparing a GitHub Release Changelog"
+          cat << EOF > "${release_changelog_filename}"
+          Automatically generated release with assets.
+
+          Changelog:
+          $(cat "${release_changelog_filename}")
+          EOF
+
+          echo "::set-output name=changelog_filename::${changelog_filename}"
+          echo "::set-output name=release_changelog_filename::${release_changelog_filename}"
+
+      - name: Display changelog
+        run: echo "${{ steps.generate_changelog.outputs.changelog }}"
+
+      - name: Login to Docker registry
+        id: docker_registry_login
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u "${{ github.actor }}" --password-stdin
+
+      - name: Define version suffix
+        id: version_suffix
+        run: |
+          if [[ "${BRANCH_NAME}" == "master" ]]; then
+            short_suffix=""
+            long_suffix=""
+          else
+            short_suffix="${BRANCH_NAME:0:1}"
+            long_suffix="${BRANCH_NAME}"
+          fi
+
+          echo "::set-output name=short::${short_suffix}"
+          echo "::set-output name=long::${long_suffix}"
+
+      - name: Build Docker image
+        id: build_docker_image
+        shell: bash
+        run: >
+          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          
+          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+
+          echo "IMAGE_ID=${IMAGE_ID}"
+          
+          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+
+          docker build
+          --tag "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --build-arg BUILD_VERSION="${PLANNED_VERSION}"
+          --file docker/no_build/Dockerfile
+          .
+
+      - name: Push Docker image to registry
+        run: |
+          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+
+          echo "IMAGE_ID=${IMAGE_ID}"
+          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          
+          docker push "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+
+      - name: Create a new tag
+        if: >
+          env.CAN_CREATE_RELEASE == 'true' &&
+          env.BRANCH_NAME == 'master' &&
+          github.event_name == 'push'
+        run: |
+          curl --request POST --url https://api.github.com/repos/${{ github.repository }}/git/tags \
+          -H 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+          -H 'content-type: application/json' \
+          --data '{"tag": "${env.PLANNED_VERSION}",
+            "message": "Pipeline build tag",
+            "object": "${{ github.sha }}",
+            "type": "commit",
+            "tagger": {
+              "name": "Alice from Wonderland",
+              "email": "noreply@localhost.localdomain",
+              "date": "${{ steps.timestamp.outputs.timestamp }}"
+            }'
+
+      - name: Create a Release
+        id: create_release
+        if: >
+          env.CAN_CREATE_RELEASE == 'true' &&
+          env.BRANCH_NAME == 'master' &&
+          github.event_name == 'push'
+        uses: actions/create-release@v1
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.PLANNED_VERSION }}
+          release_name: v${{ env.PLANNED_VERSION }}
+          body_path: ${{ steps.generate_changelog.outputs.release_changelog_filename }}
+          draft: false
+          prerelease: false
+
+      - name: Upload a Release Asset
+        if: >
+          env.CAN_CREATE_RELEASE == 'true' &&
+          env.BRANCH_NAME == 'master' &&
+          github.event_name == 'push'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.artifact_meta.outputs.full_path }}
+          asset_name: ${{ env.ARTIFACT_NAME }}
+          asset_content_type: application/octet-stream
