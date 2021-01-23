@@ -175,7 +175,7 @@ jobs:
           docker build
           --tag "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           --build-arg BUILD_VERSION="${PLANNED_VERSION}"
-          --file docker/no_build/Dockerfile
+          --file Dockerfile
           .
 
       - name: Push Docker image to registry
@@ -316,7 +316,7 @@ jobs:
           docker build
           --tag "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           --build-arg BUILD_VERSION="${PLANNED_VERSION}"
-          --file docker/no_build/Dockerfile
+          --file Dockerfile
           .
 
       - name: Push Docker image to registry
