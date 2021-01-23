@@ -329,6 +329,100 @@ jobs:
           
           docker push "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
 
+      - name: Setup RPM Build environment
+        id: setup_rpmbuild_env
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install rpm
+
+          make build
+          make compress
+
+          # rpmdev-setuptree
+          mkdir /home/runner/rpmbuild
+          mkdir -pv /home/runner/rpmbuild/BUILD
+          mkdir -pv /home/runner/rpmbuild/BUILDROOT
+          mkdir -pv /home/runner/rpmbuild/RPMS
+          mkdir -pv /home/runner/rpmbuild/SOURCES
+          mkdir -pv /home/runner/rpmbuild/SPECS
+          mkdir -pv /home/runner/rpmbuild/SRPMS
+          
+          cp -v ".rpm/nginx-mail-auth-http-server.spec.tpl" /home/runner/rpmbuild/SPECS
+          mv -v /home/runner/rpmbuild/SPECS/nginx-mail-auth-http-server.spec.tpl /home/runner/rpmbuild/SPECS/nginx-mail-auth-http-server.spec
+          
+          sed -i"" \
+            -e "s/__VERSION__/${PLANNED_VERSION}/" \
+            -e "s/__SOURCE_TARGZ_FILENAME__/nginx-mail-auth-http-server-${PLANNED_VERSION}.tar.gz/" \
+            /home/runner/rpmbuild/SPECS/nginx-mail-auth-http-server.spec
+          
+          cat "${{steps.generate_changelog.outputs.changelog_filename}}" >> /home/runner/rpmbuild/SPECS/nginx-mail-auth-http-server.spec
+          cat -n /home/runner/rpmbuild/SPECS/nginx-mail-auth-http-server.spec
+
+          cp -v "nginx-mail-auth-http-server-${PLANNED_VERSION}.tar.gz" /home/runner/rpmbuild/SOURCES
+
+      - name: Build RPM package
+        id: build_rpm_package
+        shell: bash
+        run: |
+          cd /home/runner
+          rpmbuild -v -ba "rpmbuild/SPECS/nginx-mail-auth-http-server.spec"
+
+      - name: Verify RPM package
+        id: verify_rpm_package
+        run: |
+          ls -la /home/runner/rpmbuild/RPMS/x86_64/nginx-mail-auth-http-server-${PLANNED_VERSION}-1.x86_64.rpm
+          echo "::set-output name=path_to_rpm_file::/home/runner/rpmbuild/RPMS/x86_64/nginx-mail-auth-http-server-${PLANNED_VERSION}-1.x86_64.rpm"
+          echo "::set-output name=rpm_filename::nginx-mail-auth-http-server-${PLANNED_VERSION}-1.x86_64.rpm"
+
+      - name: Setup DEB Build environment
+        id: setup_debbuild_env
+        shell: bash
+        run: |
+          size="$(stat --printf="%s" nginx-mail-auth-http-server)"
+
+          mkdir -v /home/runner/debbuild
+          mkdir -v /home/runner/debbuild/DEBIAN
+          mkdir -vp /home/runner/debbuild/usr/bin
+          mkdir -vp "/home/runner/debbuild/usr/share/doc/nginx-mail-auth-http-server-${PLANNED_VERSION}"
+
+          cp -v ".deb/control.tpl" /home/runner/debbuild/DEBIAN
+          mv -v /home/runner/debbuild/DEBIAN/control.tpl /home/runner/debbuild/DEBIAN/control
+          
+          cp -v "nginx-mail-auth-http-server-${PLANNED_VERSION}/nginx-mail-auth-http-server" /home/runner/debbuild/usr/bin/
+          cp -v "nginx-mail-auth-http-server-${PLANNED_VERSION}/README.md" "/home/runner/debbuild/usr/share/doc/nginx-mail-auth-http-server-${PLANNED_VERSION}"
+
+          sed -i"" \
+            -e "s/__VERSION__/${PLANNED_VERSION}/" \
+            -e "s/__SIZE__/${size}/" \
+            /home/runner/debbuild/DEBIAN/control
+          
+          cat -n /home/runner/debbuild/DEBIAN/control
+
+      - name: Build DEB package
+        id: build_deb_package
+        shell: bash
+        run: |
+          cd /home/runner
+          dpkg-deb --build debbuild
+        
+          mv debbuild.deb nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb
+
+      - name: Verify DEB package
+        id: verify_deb_package
+        run: |
+          ls -la "/home/runner/nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb"
+          echo "::set-output name=path_to_deb_file::/home/runner/nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb"
+          echo "::set-output name=deb_filename::nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb"
+
+      - name: Install DEB package
+        id: install_deb_package
+        run: |
+          sudo dpkg -i "${{steps.verify_deb_package.outputs.path_to_deb_file}}"
+          ls -la /usr/bin/nginx-mail-auth-http-server
+          ls -la /usr/share/doc/nginx-mail-auth-http-server*
+          nginx-mail-auth-http-server -h
+
       - name: Create a new tag
         if: >
           env.CAN_CREATE_RELEASE == 'true' &&
@@ -377,3 +471,60 @@ jobs:
           asset_path: ${{ steps.artifact_meta.outputs.full_path }}
           asset_name: ${{ env.ARTIFACT_NAME }}
           asset_content_type: application/octet-stream
+
+      - name: Upload a Release Asset (RPM package)
+        if: >
+          needs.validate_new_version.outputs.can_create == 'true' &&
+          needs.validate_new_version.outputs.branch_name == 'master' &&
+          github.event_name == 'push'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.verify_rpm_package.outputs.path_to_rpm_file }}
+          asset_name: ${{ steps.verify_rpm_package.outputs.rpm_filename }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload a Release Asset (DEB package)
+        if: >
+          needs.validate_new_version.outputs.can_create == 'true' &&
+          needs.validate_new_version.outputs.branch_name == 'master' &&
+          github.event_name == 'push'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.verify_deb_package.outputs.path_to_deb_file }}
+          asset_name: ${{ steps.verify_deb_package.outputs.deb_filename }}
+          asset_content_type: application/octet-stream
+
+      # - name: Upload RPM package to repository
+      #   if: >
+      #     needs.validate_new_version.outputs.can_create == 'true' &&
+      #     needs.validate_new_version.outputs.branch_name == 'master' &&
+      #     github.event_name == 'push'
+      #   id: upload_rpm_to_repository
+      #   run: |
+      #     export RSYNC_PASSWORD="${{ secrets.RSYNC_PASSWORD }}"
+      #     rsync \
+      #       -raz -vv \
+      #       --port "${{ secrets.RSYNC_PORT }}" \
+      #       "${{steps.verify_rpm_package.outputs.path_to_rpm_file}}" \
+      #       ${{ secrets.RSYNC_USERNAME }}@${{ secrets.RSYNC_HOSTNAME }}::${{ secrets.RSYNC_PATH_RPM_EL7 }}
+
+      # - name: Upload DEB package to repository
+      #   if: >
+      #     needs.validate_new_version.outputs.can_create == 'true' &&
+      #     needs.validate_new_version.outputs.branch_name == 'master' &&
+      #     github.event_name == 'push'
+      #   id: upload_deb_to_repository
+      #   run: |
+      #     export RSYNC_PASSWORD="${{ secrets.RSYNC_PASSWORD }}"
+      #     rsync \
+      #       -raz -vv \
+      #       --port "${{ secrets.RSYNC_PORT }}" \
+      #       "${{steps.verify_deb_package.outputs.path_to_deb_file}}" \
+      #       ${{ secrets.RSYNC_USERNAME }}@${{ secrets.RSYNC_HOSTNAME }}::${{ secrets.RSYNC_PATH_DEB }}
+
