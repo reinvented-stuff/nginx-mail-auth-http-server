@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -248,18 +247,6 @@ func main() {
 
 	log.Info().Msg("Strating server...")
 
-	newrelicApp, err := newrelic.NewApplication(
-		newrelic.ConfigAppName(ApplicationDescription),
-		newrelic.ConfigLicense(os.Getenv("NEWRELIC_LICENSE")),
-		newrelic.ConfigDistributedTracerEnabled(true),
-	)
-
-	if err != nil {
-		log.Fatal().Msgf("Error while initialising New Relic: %v", err)
-	}
-
-	log.Debug().Msg("New Relic initialised")
-
 	if err := DB.Ping(); err != nil {
 		log.Fatal().Err(err).Msgf("Error while pinging db: %v", err)
 	} else {
@@ -294,8 +281,8 @@ func main() {
 
 	handleSignalParams.httpServer = *srv
 
-	http.HandleFunc(newrelic.WrapHandleFunc(newrelicApp, "/", handlerIndex))
-	http.HandleFunc(newrelic.WrapHandleFunc(newrelicApp, "/auth", handlerAuth))
+	http.HandleFunc("/", handlerIndex)
+	http.HandleFunc("/auth", handlerAuth)
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal().Err(err).Msgf("HTTP server ListenAndServe: %v", err)
