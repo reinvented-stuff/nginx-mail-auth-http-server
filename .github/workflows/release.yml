@@ -375,6 +375,14 @@ jobs:
           echo "::set-output name=path_to_rpm_file::/home/runner/rpmbuild/RPMS/x86_64/nginx-mail-auth-http-server-${PLANNED_VERSION}-1.x86_64.rpm"
           echo "::set-output name=rpm_filename::nginx-mail-auth-http-server-${PLANNED_VERSION}-1.x86_64.rpm"
 
+      - name: Upload a Build Artifact (RPM package)
+        id: upload_artifact_rpm
+        uses: actions/upload-artifact@v2.2.2
+        with:
+          name: "${{ steps.verify_rpm_package.outputs.rpm_filename }}"
+          path: "${{ steps.verify_rpm_package.outputs.path_to_rpm_file }}"
+          retention-days: 30
+
       - name: Setup DEB Build environment
         id: setup_debbuild_env
         shell: bash
@@ -414,6 +422,14 @@ jobs:
           ls -la "/home/runner/nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb"
           echo "::set-output name=path_to_deb_file::/home/runner/nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb"
           echo "::set-output name=deb_filename::nginx-mail-auth-http-server-${PLANNED_VERSION}_amd64.deb"
+
+      - name: Upload a Build Artifact (DEB package)
+        id: upload_artifact_deb
+        uses: actions/upload-artifact@v2.2.2
+        with:
+          name: "${{ steps.verify_deb_package.outputs.deb_filename }}"
+          path: "${{ steps.verify_deb_package.outputs.path_to_deb_file }}"
+          retention-days: 30
 
       - name: Install DEB package
         id: install_deb_package
