@@ -124,7 +124,7 @@ jobs:
           go build 
           -ldflags="-X 'main.buildVersion=${PLANNED_VERSION}'"
           -v 
-          -o app 
+          -o "${APP_NAME}-${PLANNED_VERSION}-linux.x86_64.bin" 
           .
 
       - name: Validate build artifact exists
