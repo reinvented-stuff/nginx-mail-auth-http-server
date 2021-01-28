@@ -2,7 +2,7 @@
 
 work in progress
 
-## Usage
+## Run as binary
 
 ```
 ./nginx-mail-auth-http-server -h
@@ -11,6 +11,36 @@ Usage of ./nginx-mail-auth-http-server:
     	Path to configuration file (default "nginx-mail-auth-http-server.conf")
   -version
     	Show version
+```
+
+## Run in Docker/Podman
+
+We currently publish docker images only on github.
+
+In order to pull any images from there you need to have a personal github token. Please, refer to the official documantation: https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token#creating-a-token
+
+```bash
+docker run \
+  --log-driver=journald \
+  --log-opt=tag="nginx-auth" \
+  --network host \
+  --interactive \
+  --tty \
+  --name nginx-mail-auth-http-server \
+  -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
+  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.2.0"
+```
+
+```bash
+podman run \
+  --log-driver=journald \
+  --log-opt=tag="nginx-auth" \
+  --network host \
+  --interactive \
+  --tty \
+  --name nginx-mail-auth-http-server \
+  -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
+  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.2.0"
 ```
 
 # Nginx configuration
