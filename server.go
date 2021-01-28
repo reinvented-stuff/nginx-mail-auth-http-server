@@ -197,7 +197,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		result.AuthStatus = "OK"
 		result.AuthServer = upstream.Address
-		result.AuthPort = upstream.Address
+		result.AuthPort = upstream.Port
 
 		return true, result, nil
 
