@@ -23,7 +23,7 @@ Usage of ./nginx-mail-auth-http-server:
 
 ## Run in Docker/Podman
 
-We currently publish docker images only on github.
+We currently publish docker images on [github](https://github.com/reinvented-stuff/nginx-mail-auth-http-server/packages/586191) and [quay.io](https://quay.io/repository/reinventedstuff/nginx-mail-auth-http-server).
 
 In order to pull any images from there you need to have a personal github token. Please, refer to the official documantation: https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token#creating-a-token
 
@@ -36,7 +36,7 @@ docker run \
   --tty \
   --name nginx-mail-auth-http-server \
   -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
-  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.2.0"
+  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.3.0"
 ```
 
 ```bash
@@ -48,7 +48,7 @@ podman run \
   --tty \
   --name nginx-mail-auth-http-server \
   -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
-  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.2.0"
+  "quay.io/reinventedstuff/nginx-mail-auth-http-server:1.3.0"
 ```
 
 # Nginx configuration
@@ -96,7 +96,7 @@ postfix is supposed to be listening a different port from the one nginx does lis
 `mynetworks` should contain your nginx host. This will let postfix accept all mail from nginx.
 `smtpd_authorized_xclient_hosts` should contain your nginx host. This allows Nginx to pass XCLIENT command.
 
-```
+```bash
 inet_interfaces = localhost
 mynetworks = 127.0.0.0/8
 smtpd_authorized_xclient_hosts = 127.0.0.0/8
@@ -129,10 +129,10 @@ It is required for queries to return two named values: `address` and `port` (of 
 
 You can use the following named parameters in your lookup queries:
 
-`:user` – Username part of the authentication request (only on AUTH command)
-`:pass` – Password part of the authentication request (only on AUTH command)
-`:mailTo` – RCPT TO command content (if no AUTH command passed)
-`:mailFrom` – MAIL FROM command content (if no AUTH command passed)
+* `:User` – Username part of the authentication request (only on AUTH command)
+* `:Pass` – Password part of the authentication request (only on AUTH command)
+* `:RcptTo` – RCPT TO command content (if no AUTH command passed)
+* `:MailFrom` – MAIL FROM command content (if no AUTH command passed)
 
 Example:
 
@@ -140,7 +140,7 @@ Example:
 SELECT address, port 
 FROM transport 
 JOIN account ON account.transport_id = transport.id 
-WHERE account.username = :user AND account.password = MD5(:pass);
+WHERE account.username = :User AND account.password = MD5(:Pass);
 ```
 
 # IPv6 support
