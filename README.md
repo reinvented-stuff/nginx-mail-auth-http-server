@@ -1,6 +1,6 @@
 # Nginx Mail Auth Server
 
-Nginx Mail Auth HTTP Server provides an auth service for [Nginx Mail](https://nginx.org/en/docs/mail/ngx_mail_core_module.html) module.
+Nginx Mail Auth HTTP Server provides an auth service for [Nginx Mail](https://nginx.org/en/docs/mail/ngx_mail_core_module.html) module. 
 
 Benifits of using nginx as a mail proxy:
 1. Nginx is fast and thin
@@ -9,6 +9,29 @@ Benifits of using nginx as a mail proxy:
 1. Configuration is dynamic
 
 work in progress
+
+## Workflow Diagram
+
+```
+
+      +-------------+           +---------------+          +--------------+
+      |             |           |               |          |              |
+      |   Postfix   <----7------+     Nginx     <----2-----+    Gmail     |
+      |             |   SMTP    |               |   SMTP   |              |
+      +-------------+           +-----^---+-----+          +------^-------+
+                                      |   |                       |
+                                      |   |                       |
+                                      6   3  HTTP(S)              1 SMTP
+                                      |   |                       |
+                                      |   |                       |
+      +-------------+           +-----+---v-----+          +------+-------+
+      |             +-----5----->               |          |              |
+      |    MySQL    |           |  Auth Server  |          |    Client    |
+      |             <-----4-----+               |          |              |
+      +-------------+   MySQL   +---------------+          +--------------+
+
+
+```
 
 ## Run as binary
 
