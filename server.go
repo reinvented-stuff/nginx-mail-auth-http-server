@@ -54,11 +54,25 @@ type authResultStruct struct {
 	AuthErrorCode string
 }
 
+type UpstreamStruct struct {
+	Address string `json:"address"`
+	Port    int    `json:"port"`
+}
+
+type QueryParamsStruct struct {
+	User     string `db:"User"`
+	Pass     string `db:"Pass"`
+	RcptTo   string `db:"RcptTo"`
+	MailFrom string `db:"MailFrom"`
+}
+
 var Configuration = ConfigurationStruct{}
 var handleSignalParams = handleSignalParamsStruct{}
 var flagParams = flagParamsStruct{}
 
 func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
+
+	log.Debug().Msgf("Loading configuration file '%s'", configPtr)
 
 	configFile, _ := os.Open(configPtr)
 	defer configFile.Close()
@@ -70,20 +84,11 @@ func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct)
 		log.Error().
 			Err(err).
 			Str("stage", "init").
-			Msgf("Error while reading config file")
+			Msgf("Error while loading configuration file '%s'", configPtr)
 	}
-}
 
-type UpstreamStruct struct {
-	Address string `json:"address"`
-	Port    int    `json:"port"`
-}
+	log.Debug().Msg("Finished loading configuration file")
 
-type QueryParamsStruct struct {
-	User     string `db:"User"`
-	Pass     string `db:"Pass"`
-	RcptTo   string `db:"RcptTo"`
-	MailFrom string `db:"MailFrom"`
 }
 
 func authenticate(user string, pass string, protocol string, mailFrom string, rcptTo string) (success bool, result authResultStruct, err error) {
@@ -161,6 +166,14 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		}
 
+		log.Debug().
+			Str("protocol", protocol).
+			Str("origMailFrom", mailFrom).
+			Str("origRcptTo", rcptTo).
+			Str("finalMailFrom", queryParams.MailFrom).
+			Str("finalRcptTo", queryParams.RcptTo).
+			Msg("Relay lookup query parameters prepared")
+
 		query = Configuration.Database.RelayLookupQuery
 
 	} else {
@@ -174,7 +187,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		query = Configuration.Database.AuthLookupQuery
 	}
 
-	log.Info().
+	log.Debug().
 		Str("query", query).
 		Msg("Lookup query")
 
@@ -193,12 +206,18 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 	defer queryResult.Close()
 
 	for queryResult.Next() {
-		log.Debug().Msgf("Found results for '%s':'%s'", user, pass)
+		log.Debug().
+			Str("protocol", protocol).
+			Str("user", user).
+			Str("pass", pass).
+			Str("mailFrom", mailFrom).
+			Str("rcptTo", rcptTo).
+			Msgf("Found results after lookup")
 
 		var upstream = UpstreamStruct{}
 
 		if err = queryResult.StructScan(&upstream); err != nil {
-			log.Fatal().Err(err).Msgf("Error while scanning query results: %v", err)
+			log.Fatal().Err(err).Msgf("Error while scanning query results")
 
 			result.AuthStatus = "Temporary server problem, try again later"
 			result.AuthErrorCode = "451 4.3.0"
@@ -210,7 +229,15 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			log.Debug().Msgf("Successfully scanned query results")
 		}
 
-		log.Info().Msgf("Found upstream: %v", upstream.Address)
+		log.Info().
+			Str("protocol", protocol).
+			Str("user", user).
+			Str("pass", pass).
+			Str("mailFrom", mailFrom).
+			Str("rcptTo", rcptTo).
+			Str("upstreamAddress", upstream.Address).
+			Str("upstreamPort", upstream.Port).
+			Msgf("Found upstream")
 
 		result.AuthStatus = "OK"
 		result.AuthServer = upstream.Address
@@ -220,6 +247,14 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 	}
 
+	log.Info().
+		Str("protocol", protocol).
+		Str("user", user).
+		Str("pass", pass).
+		Str("mailFrom", mailFrom).
+		Str("rcptTo", rcptTo).
+		Msgf("No results after lookup")
+
 	result.AuthStatus = "Error: authentication failed."
 	result.AuthErrorCode = "535 5.7.8"
 	result.AuthWait = "5"
@@ -228,6 +263,9 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 }
 
 func handleSignal() {
+
+	log.Debug().Msg("Initialising signal handling function")
+
 	signalChannel := make(chan os.Signal)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
@@ -291,13 +329,24 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	log.Info().
+		Str("authMethod", authMethod).
+		Str("authUser", authUser).
+		Str("authPass", authPass).
+		Str("authProtocol", authProtocol).
+		Str("authLoginAttempt", authLoginAttempt).
+		Str("clientIP", clientIP).
+		Str("clientHost", clientHost).
+		Str("authSMTPHelo", authSMTPHelo).
+		Str("authSMTPFrom", authSMTPFrom).
+		Str("authSMTPTo", authSMTPTo).
+		Str("event", "auth").
 		Str("AuthStatus", result.AuthStatus).
 		Str("AuthServer", result.AuthServer).
 		Int("AuthPort", result.AuthPort).
 		Str("AuthWait", result.AuthWait).
 		Str("AuthErrorCode", result.AuthErrorCode).
 		Str("event", "auth_result").
-		Msgf("Received auth result for '%s':'%s'", authUser, authPass)
+		Msgf("Received auth result")
 
 	rw.Header().Set("Auth-Status", result.AuthStatus)
 
@@ -325,14 +374,9 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 }
 
 func init() {
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	log.Debug().Msg("Logger initialised")
 
 	configPtr := flag.String("config", "nginx-mail-auth-http-server.conf", "Path to configuration file")
 	showVersionPtr := flag.Bool("version", false, "Show version")
-
-	ReadConfigurationFile(*configPtr, &Configuration)
-
 	flag.Parse()
 
 	if *showVersionPtr {
@@ -341,6 +385,12 @@ func init() {
 		os.Exit(0)
 	}
 
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	log.Debug().Msg("Logger initialised")
+
+	ReadConfigurationFile(*configPtr, &Configuration)
+
+	log.Debug().Msg("Initialising database connection")
 	mysqlConnectionURI := Configuration.Database.URI
 	db, err := sqlx.Open("mysql", mysqlConnectionURI)
 	if err != nil {
@@ -355,23 +405,19 @@ func init() {
 			Err(err).
 			Str("stage", "init").
 			Msgf("Error while pinging db: %v", err)
-	} else {
-		log.Info().
-			Str("stage", "init").
-			Msg("Database ping ok")
 	}
+
+	log.Debug().Msg("Finished initialising database connection")
 
 	handleSignal()
 }
 
 func main() {
 
-	log.Info().Msg("Strating server...")
+	log.Info().Msgf("Strating server on %s", Configuration.Listen)
 
 	if err := DB.Ping(); err != nil {
 		log.Fatal().Err(err).Msgf("Error while pinging db: %v", err)
-	} else {
-		log.Info().Msg("Database ping ok")
 	}
 
 	srv := &http.Server{
