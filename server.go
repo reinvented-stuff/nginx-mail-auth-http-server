@@ -167,11 +167,10 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		}
 
 		log.Debug().
-			Str("protocol", protocol).
-			Str("origMailFrom", mailFrom).
-			Str("origRcptTo", rcptTo).
-			Str("finalMailFrom", queryParams.MailFrom).
-			Str("finalRcptTo", queryParams.RcptTo).
+			Str("User", queryParams.User).
+			Str("Pass", queryParams.Pass).
+			Str("MailFrom", queryParams.MailFrom).
+			Str("RcptTo", queryParams.RcptTo).
 			Msg("Relay lookup query parameters prepared")
 
 		query = Configuration.Database.RelayLookupQuery
@@ -236,7 +235,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			Str("mailFrom", mailFrom).
 			Str("rcptTo", rcptTo).
 			Str("upstreamAddress", upstream.Address).
-			Str("upstreamPort", upstream.Port).
+			Int("upstreamPort", upstream.Port).
 			Msgf("Found upstream")
 
 		result.AuthStatus = "OK"
@@ -328,32 +327,29 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 			Msgf("Can't authenticate %s:%s", authUser, authPass)
 	}
 
-	log.Info().
-		Str("authMethod", authMethod).
-		Str("authUser", authUser).
-		Str("authPass", authPass).
-		Str("authProtocol", authProtocol).
-		Str("authLoginAttempt", authLoginAttempt).
-		Str("clientIP", clientIP).
-		Str("clientHost", clientHost).
-		Str("authSMTPHelo", authSMTPHelo).
-		Str("authSMTPFrom", authSMTPFrom).
-		Str("authSMTPTo", authSMTPTo).
-		Str("event", "auth").
-		Str("AuthStatus", result.AuthStatus).
-		Str("AuthServer", result.AuthServer).
-		Int("AuthPort", result.AuthPort).
-		Str("AuthWait", result.AuthWait).
-		Str("AuthErrorCode", result.AuthErrorCode).
-		Str("event", "auth_result").
-		Msgf("Received auth result")
-
 	rw.Header().Set("Auth-Status", result.AuthStatus)
 
 	if success {
+
 		log.Info().
+			Str("authMethod", authMethod).
+			Str("authUser", authUser).
+			Str("authPass", authPass).
+			Str("authProtocol", authProtocol).
+			Str("authLoginAttempt", authLoginAttempt).
+			Str("clientIP", clientIP).
+			Str("clientHost", clientHost).
+			Str("authSMTPHelo", authSMTPHelo).
+			Str("authSMTPFrom", authSMTPFrom).
+			Str("authSMTPTo", authSMTPTo).
+			Str("event", "auth").
+			Str("AuthStatus", result.AuthStatus).
+			Str("AuthServer", result.AuthServer).
+			Int("AuthPort", result.AuthPort).
+			Str("AuthWait", result.AuthWait).
+			Str("AuthErrorCode", result.AuthErrorCode).
 			Str("event", "auth_ok").
-			Msgf("Successfully authenticated '%s':'%s'", authUser, authPass)
+			Msgf("Successful authentication")
 
 		rw.Header().Set("Auth-Server", result.AuthServer)
 		rw.Header().Set("Auth-Port", strconv.Itoa(result.AuthPort))
@@ -361,8 +357,24 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	} else {
 
 		log.Info().
+			Str("authMethod", authMethod).
+			Str("authUser", authUser).
+			Str("authPass", authPass).
+			Str("authProtocol", authProtocol).
+			Str("authLoginAttempt", authLoginAttempt).
+			Str("clientIP", clientIP).
+			Str("clientHost", clientHost).
+			Str("authSMTPHelo", authSMTPHelo).
+			Str("authSMTPFrom", authSMTPFrom).
+			Str("authSMTPTo", authSMTPTo).
+			Str("event", "auth").
+			Str("AuthStatus", result.AuthStatus).
+			Str("AuthServer", result.AuthServer).
+			Int("AuthPort", result.AuthPort).
+			Str("AuthWait", result.AuthWait).
+			Str("AuthErrorCode", result.AuthErrorCode).
 			Str("event", "auth_failed").
-			Msgf("Access denied '%s':'%s'", authUser, authPass)
+			Msgf("Failed to authenticate")
 
 		rw.Header().Set("Auth-Wait", result.AuthWait)
 
