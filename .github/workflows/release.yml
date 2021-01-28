@@ -166,7 +166,7 @@ jobs:
         shell: bash
         run: >
           GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "reinventedstuff/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
           docker build
           --tag "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
@@ -178,7 +178,7 @@ jobs:
       - name: Push Docker image to registry
         run: |
           GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "reinventedstuff/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
           
           docker push "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           docker push "quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
@@ -302,7 +302,7 @@ jobs:
         shell: bash
         run: >
           GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "reinventedstuff/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
           docker build
           --tag "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
@@ -314,7 +314,7 @@ jobs:
       - name: Push Docker image to registry
         run: |
           GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "reinventedstuff/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
           
           docker push "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           docker push "quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
