@@ -68,20 +68,28 @@ http {
 }
 
 mail {
-    server_name mx.example.com;
-    auth_http http://localhost:8080/auth;
+    server_name          mx.example.com;
 
-    ssl on;
-    ssl_certificate /etc/pki/tls/certs/mx.example.com.crt;
-    ssl_certificate_key /etc/pki/tls/private/mx.example.com.key;
+    auth_http            http://localhost:8080/auth;
+    auth_http_header     X-Origin-Mail-Key 9TlBLGKoOa;
+
+    starttls             on;
+    ssl_certificate      /etc/pki/tls/certs/mx.example.com.crt;
+    ssl_certificate_key  /etc/pki/tls/private/mx.example.com.key;
+    ssl_protocols        TLSv1.2 TLSv1.3;
+    ssl_ciphers          HIGH:!aNULL:!MD5;
+    ssl_session_cache    shared:SSL:10m;
+    ssl_session_timeout  10m;
+
 
     server {
-        listen  25;
-        protocol smtp;
-        smtp_auth login plain none;
+        listen                    25;
+        protocol                  smtp;
+        smtp_auth                 login plain none;
+        auth_http_header          X-Origin-Server-Key zb4xKm9XmD;
 
-        error_log  /var/log/nginx/mx.example.com-mail-error.log;
-        proxy_pass_error_message on;
+        error_log                 /var/log/nginx/mx.example.com-mail-error.log;
+        proxy_pass_error_message  on;
     }
 }
 
@@ -103,6 +111,22 @@ smtpd_authorized_xclient_hosts = 127.0.0.0/8
 smtpd_recipient_restrictions =
 	permit_mynetworks,
 	...
+```
+
+## master.cf
+
+To make postfix listen on a custom port you can comment out the default `smtp ...` line and add a new one as proposed below.
+
+```
+# ==========================================================================
+# service type  private unpriv  chroot  wakeup  maxproc command + args
+#               (yes)   (yes)   (no)    (never) (100)
+# ==========================================================================
+# smtp      inet  n       -       n       -       -       smtpd
+31025     inet  n       -       n       -       -       smtpd -o smtpd_tls_auth_only=no
+
+...
+
 ```
 
 # Application configuration
