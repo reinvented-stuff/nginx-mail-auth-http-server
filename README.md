@@ -143,6 +143,10 @@ JOIN account ON account.transport_id = transport.id
 WHERE account.username = :User AND account.password = MD5(:Pass);
 ```
 
+## VERP (Variable envelope return path)
+
+Currently the server strips everything from the first found "+" symbol until the first "@" symbol.
+
 # IPv6 support
 
 To be done.
