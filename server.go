@@ -1,13 +1,8 @@
 package main
 
 import (
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
-
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html"
@@ -17,11 +12,26 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 var ApplicationDescription = "Nginx Mail Auth HTTP Server"
 var BuildVersion = "0.0.0"
-var DB *sql.DB
+var DB *sqlx.DB
+
+type DatabaseStruct struct {
+	URI              string `json:"uri"`
+	AuthLookupQuery  string `json:"auth_lookup_query"`
+	RelayLookupQuery string `json:"relay_lookup_query"`
+}
+
+type ConfigurationStruct struct {
+	Database DatabaseStruct `json:"database"`
+}
 
 type flagParamsStruct struct {
 	address string
@@ -30,7 +40,7 @@ type flagParamsStruct struct {
 
 type handleSignalParamsStruct struct {
 	httpServer http.Server
-	db         *sql.DB
+	db         *sqlx.DB
 }
 
 type authResultStruct struct {
@@ -41,45 +51,70 @@ type authResultStruct struct {
 	AuthErrorCode string
 }
 
+var Configuration = ConfigurationStruct{}
 var handleSignalParams = handleSignalParamsStruct{}
 var flagParams = flagParamsStruct{}
 
-// func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
+func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
 
-// 	configFile, _ := os.Open(configPtr)
-// 	defer configFile.Close()
+	configFile, _ := os.Open(configPtr)
+	defer configFile.Close()
 
-// 	JSONDecoder := json.NewDecoder(configFile)
+	JSONDecoder := json.NewDecoder(configFile)
 
-// 	err := JSONDecoder.Decode(&configuration)
-// 	if err != nil {
-// 		log.Fatal("Error while reading config file: ", err)
-// 	}
+	err := JSONDecoder.Decode(&configuration)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("stage", "init").
+			Msgf("Error while reading config file")
+	}
+}
 
-// }
-
-type ID struct {
-	ID int `json:"id"`
+type UpstreamStruct struct {
+	Address string `json:"address"`
+	Port    int    `json:"port"`
 }
 
 func authenticate(user string, pass string, protocol string, mailFrom string, mailTo string) (success bool, result authResultStruct, err error) {
 
 	result = authResultStruct{}
+	var query string
+	var query_params = map[string]interface{}{
+		"user":     user,
+		"pass":     pass,
+		"mailTo":   mailTo,
+		"mailFrom": mailFrom,
+	}
 
 	if user == "" &&
 		pass == "" &&
 		mailFrom != "" &&
 		mailTo != "" {
-		log.Info().Msg("Authenticating inbound mail")
-		log.Debug().
-			Str("user", user).
-			Str("pass", pass).
+		log.Info().
 			Str("protocol", protocol).
 			Str("mailFrom", mailFrom).
-			Str("mailTo", mailTo)
+			Str("mailTo", mailTo).
+			Msg("Authenticating by relay access")
+
+		query = Configuration.Database.RelayLookupQuery
+
+	} else {
+
+		log.Info().
+			Str("protocol", protocol).
+			Str("user", user).
+			Str("pass", pass).
+			Msg("Authenticating by credentials")
+
+		query = Configuration.Database.AuthLookupQuery
 	}
 
-	queryResult, err := DB.Query("select id from virtual_mailbox_maps where email_address = ? and password = SHA2(?, 256) and is_active = 1", user, pass)
+	log.Info().
+		Str("query", query).
+		Msg("Lookup query")
+
+	queryResult, err := DB.NamedQuery(query, query_params)
 
 	if err != nil {
 		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
@@ -96,9 +131,9 @@ func authenticate(user string, pass string, protocol string, mailFrom string, ma
 	for queryResult.Next() {
 		log.Debug().Msgf("Found results for '%s':'%s'", user, pass)
 
-		var id ID
+		var upstream = UpstreamStruct{}
 
-		if err = queryResult.Scan(&id.ID); err != nil {
+		if err = queryResult.StructScan(&upstream); err != nil {
 			log.Fatal().Err(err).Msgf("Error while scanning query results: %v", err)
 
 			result.AuthStatus = "Temporary server problem, try again later"
@@ -111,11 +146,11 @@ func authenticate(user string, pass string, protocol string, mailFrom string, ma
 			log.Debug().Msgf("Successfully scanned query results")
 		}
 
-		log.Info().Msgf("Found id: %x", id.ID)
+		log.Info().Msgf("Found upstream: %v", upstream.Address)
 
 		result.AuthStatus = "OK"
-		result.AuthServer = "127.0.0.1"
-		result.AuthPort = "25"
+		result.AuthServer = upstream.Address
+		result.AuthPort = upstream.Address
 
 		return true, result, nil
 
@@ -153,7 +188,7 @@ func handleSignal() {
 }
 
 func handlerIndex(rw http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(rw, "Hello, %q", html.EscapeString(req.URL.Path))
+	fmt.Fprintf(rw, "%s v%s\n", html.EscapeString(ApplicationDescription), html.EscapeString(BuildVersion))
 }
 
 func handlerAuth(rw http.ResponseWriter, req *http.Request) {
@@ -228,8 +263,10 @@ func init() {
 
 	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
 	portPtr := flag.String("port", "8080", "Port to listen")
-	// configPtr := flag.String("config", "server.conf", "Path to configuration file")
+	configPtr := flag.String("config", "nginx-mail-auth-http-server.conf", "Path to configuration file")
 	showVersionPtr := flag.Bool("version", false, "Show version")
+
+	ReadConfigurationFile(*configPtr, &Configuration)
 
 	flag.Parse()
 	flagParams.address = *addressPtr
@@ -241,8 +278,8 @@ func init() {
 		os.Exit(0)
 	}
 
-	mysqlConnectionURI := os.Getenv("MYSQL_URI")
-	db, err := sql.Open("mysql", mysqlConnectionURI)
+	mysqlConnectionURI := Configuration.Database.URI
+	db, err := sqlx.Open("mysql", mysqlConnectionURI)
 	if err != nil {
 		log.Fatal().Msgf("Error while initialising db: %v", err)
 	}
@@ -273,8 +310,6 @@ func main() {
 	} else {
 		log.Info().Msg("Database ping ok")
 	}
-
-	// ReadConfigurationFile(*configPtr, &Configuration)
 
 	var listenAddress strings.Builder
 	listenAddress.WriteString(flagParams.address)
