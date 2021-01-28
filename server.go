@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -47,7 +48,7 @@ type handleSignalParamsStruct struct {
 type authResultStruct struct {
 	AuthStatus    string
 	AuthServer    string
-	AuthPort      string
+	AuthPort      int
 	AuthWait      string
 	AuthErrorCode string
 }
@@ -276,7 +277,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	log.Info().
 		Str("AuthStatus", result.AuthStatus).
 		Str("AuthServer", result.AuthServer).
-		Str("AuthPort", result.AuthPort).
+		Int("AuthPort", result.AuthPort).
 		Str("AuthWait", result.AuthWait).
 		Str("AuthErrorCode", result.AuthErrorCode).
 		Str("event", "auth_result").
@@ -290,7 +291,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 			Msgf("Successfully authenticated '%s':'%s'", authUser, authPass)
 
 		rw.Header().Set("Auth-Server", result.AuthServer)
-		rw.Header().Set("Auth-Port", result.AuthPort)
+		rw.Header().Set("Auth-Port", strconv.Itoa(result.AuthPort))
 
 	} else {
 
