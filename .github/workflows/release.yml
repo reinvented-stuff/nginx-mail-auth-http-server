@@ -145,6 +145,7 @@ jobs:
         id: docker_registry_login
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.QUAYIO_PASSWORD }}" | docker login quay.io -u "${{ secrets.QUAYIO_USERNAME }}" --password-stdin
 
       - name: Define version suffix
         id: version_suffix
@@ -164,7 +165,7 @@ jobs:
         id: build_docker_image
         shell: bash
         run: >
-          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          IMAGE_ID=${{ github.repository }}/${APP_NAME}
           
           IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
@@ -173,20 +174,22 @@ jobs:
           echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
 
           docker build
-          --tag "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           --build-arg BUILD_VERSION="${PLANNED_VERSION}"
           --file Dockerfile
           .
 
       - name: Push Docker image to registry
         run: |
-          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          IMAGE_ID=${{ github.repository }}/${APP_NAME}
           IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
           echo "IMAGE_ID=${IMAGE_ID}"
           echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           
-          docker push "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          docker push "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          docker push "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
 
   release:
     name: Release
@@ -286,6 +289,7 @@ jobs:
         id: docker_registry_login
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.QUAYIO_PASSWORD }}" | docker login quay.io -u "${{ secrets.QUAYIO_USERNAME }}" --password-stdin
 
       - name: Define version suffix
         id: version_suffix
@@ -305,7 +309,7 @@ jobs:
         id: build_docker_image
         shell: bash
         run: >
-          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          IMAGE_ID=${{ github.repository }}/${APP_NAME}
           
           IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
@@ -314,20 +318,22 @@ jobs:
           echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
 
           docker build
-          --tag "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           --build-arg BUILD_VERSION="${PLANNED_VERSION}"
           --file Dockerfile
           .
 
       - name: Push Docker image to registry
         run: |
-          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/${APP_NAME}
+          IMAGE_ID=${{ github.repository }}/${APP_NAME}
           IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
           echo "IMAGE_ID=${IMAGE_ID}"
           echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           
-          docker push "${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          docker push "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          docker push "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
 
       - name: Setup RPM Build environment
         id: setup_rpmbuild_env
