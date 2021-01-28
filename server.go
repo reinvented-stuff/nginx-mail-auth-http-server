@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -76,26 +77,72 @@ type UpstreamStruct struct {
 	Port    int    `json:"port"`
 }
 
-func authenticate(user string, pass string, protocol string, mailFrom string, mailTo string) (success bool, result authResultStruct, err error) {
+type QueryParamsStruct struct {
+	User     string `db:"User"`
+	Pass     string `db:"Pass"`
+	RcptTo   string `db:"RcptTo"`
+	MailFrom string `db:"MailFrom"`
+}
+
+func authenticate(user string, pass string, protocol string, mailFrom string, rcptTo string) (success bool, result authResultStruct, err error) {
 
 	result = authResultStruct{}
+
 	var query string
-	var query_params = map[string]interface{}{
-		"user":     user,
-		"pass":     pass,
-		"mailTo":   mailTo,
-		"mailFrom": mailFrom,
+	var queryParams = QueryParamsStruct{
+		User:     user,
+		Pass:     pass,
+		RcptTo:   "",
+		MailFrom: "",
 	}
 
 	if user == "" &&
 		pass == "" &&
 		mailFrom != "" &&
-		mailTo != "" {
+		rcptTo != "" {
 		log.Info().
 			Str("protocol", protocol).
 			Str("mailFrom", mailFrom).
-			Str("mailTo", mailTo).
+			Str("rcptTo", rcptTo).
 			Msg("Authenticating by relay access")
+
+		mailHeaderRegex := regexp.MustCompile("<(.*?)>")
+		mailFromEmailMatch := mailHeaderRegex.FindStringSubmatch(mailFrom)
+		rcptToEmailMatch := mailHeaderRegex.FindStringSubmatch(rcptTo)
+
+		if len(mailFromEmailMatch) == 2 {
+			queryParams.MailFrom = mailFromEmailMatch[1]
+
+		} else {
+			log.Error().
+				Str("mailFrom", mailFrom).
+				Int("mailFromEmailMatchLen", len(mailFromEmailMatch)).
+				Msg("Can't parse MAIL FROM command")
+
+			result.AuthStatus = "Temporary server problem, try again later"
+			result.AuthErrorCode = "451 4.3.0"
+			result.AuthWait = "5"
+
+			return false, result, err
+
+		}
+
+		if len(rcptToEmailMatch) == 2 {
+			queryParams.RcptTo = rcptToEmailMatch[1]
+
+		} else {
+			log.Error().
+				Str("rcptTo", rcptTo).
+				Int("rcptToEmailMatchLen", len(rcptToEmailMatch)).
+				Msg("Can't parse RCPT TO command")
+
+			result.AuthStatus = "Temporary server problem, try again later"
+			result.AuthErrorCode = "451 4.3.0"
+			result.AuthWait = "5"
+
+			return false, result, err
+
+		}
 
 		query = Configuration.Database.RelayLookupQuery
 
@@ -114,7 +161,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, ma
 		Str("query", query).
 		Msg("Lookup query")
 
-	queryResult, err := DB.NamedQuery(query, query_params)
+	queryResult, err := DB.NamedQuery(query, queryParams)
 
 	if err != nil {
 		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
@@ -192,6 +239,7 @@ func handlerIndex(rw http.ResponseWriter, req *http.Request) {
 }
 
 func handlerAuth(rw http.ResponseWriter, req *http.Request) {
+
 	authMethod := req.Header.Get("Auth-Method")
 	authUser := req.Header.Get("Auth-User")
 	authPass := req.Header.Get("Auth-Pass")
@@ -199,8 +247,9 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	authLoginAttempt := req.Header.Get("Auth-Login-Attempt")
 	clientIP := req.Header.Get("Client-IP")
 	clientHost := req.Header.Get("Client-Host")
-	clientSMTPFrom := req.Header.Get("Client-SMTP-From")
-	clientSMTPTo := req.Header.Get("Client-SMTP-To")
+	authSMTPHelo := req.Header.Get("Auth-SMTP-Helo")
+	authSMTPFrom := req.Header.Get("Auth-SMTP-From")
+	authSMTPTo := req.Header.Get("Auth-SMTP-To")
 
 	log.Info().
 		Str("authMethod", authMethod).
@@ -210,12 +259,13 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		Str("authLoginAttempt", authLoginAttempt).
 		Str("clientIP", clientIP).
 		Str("clientHost", clientHost).
-		Str("clientSMTPFrom", clientSMTPFrom).
-		Str("clientSMTPTo", clientSMTPTo).
+		Str("authSMTPHelo", authSMTPHelo).
+		Str("authSMTPFrom", authSMTPFrom).
+		Str("authSMTPTo", authSMTPTo).
 		Str("event", "auth").
 		Msgf("Incoming auth request")
 
-	success, result, err := authenticate(authUser, authPass, authProtocol, clientSMTPFrom, clientSMTPTo)
+	success, result, err := authenticate(authUser, authPass, authProtocol, authSMTPFrom, authSMTPTo)
 	if err != nil {
 		log.Error().
 			Err(err).
