@@ -165,17 +165,12 @@ jobs:
         id: build_docker_image
         shell: bash
         run: >
-          IMAGE_ID=${{ github.repository }}/${APP_NAME}
-          
-          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-
-          echo "IMAGE_ID=${IMAGE_ID}"
-          
-          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
           docker build
-          --tag "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
-          --tag "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           --build-arg BUILD_VERSION="${PLANNED_VERSION}"
           --file Dockerfile
           .
@@ -309,31 +304,23 @@ jobs:
         id: build_docker_image
         shell: bash
         run: >
-          IMAGE_ID=${{ github.repository }}/${APP_NAME}
-          
-          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-
-          echo "IMAGE_ID=${IMAGE_ID}"
-          
-          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
 
           docker build
-          --tag "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
-          --tag "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          --tag "quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           --build-arg BUILD_VERSION="${PLANNED_VERSION}"
           --file Dockerfile
           .
 
       - name: Push Docker image to registry
         run: |
-          IMAGE_ID=${{ github.repository }}/${APP_NAME}
-          IMAGE_ID=$(echo "${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
-
-          echo "IMAGE_ID=${IMAGE_ID}"
-          echo "VERSION=${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          GITHUB_IMAGE_ID=$(echo "${{ github.repository }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
+          QUAYIO_IMAGE_ID=$(echo "${{ github.repository_owner }}/${APP_NAME}${IMAGE_ID}" | tr '[A-Z]' '[a-z]')
           
-          docker push "docker.pkg.github.com/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
-          docker push "quay.io/${IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
+          docker push "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+          docker push "quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
 
       - name: Setup RPM Build environment
         id: setup_rpmbuild_env
