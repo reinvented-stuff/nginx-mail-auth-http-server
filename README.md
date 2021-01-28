@@ -1,4 +1,12 @@
-# Nginx Auth Server
+# Nginx Mail Auth Server
+
+Nginx Mail Auth HTTP Server provides an auth service for [Nginx Mail](https://nginx.org/en/docs/mail/ngx_mail_core_module.html) module.
+
+Benifits of using nginx as a mail proxy:
+1. Nginx is fast and thin
+1. You can do load balancing
+1. You can use multiple upstream servers
+1. Configuration is dynamic
 
 work in progress
 
@@ -85,11 +93,13 @@ postfix is supposed to be listening a different port from the one nginx does lis
 
 ## main.cf
 
-`mynetworks` shoud contain your nginx host. This will let postfix accept all mail from nginx.
+`mynetworks` should contain your nginx host. This will let postfix accept all mail from nginx.
+`smtpd_authorized_xclient_hosts` should contain your nginx host. This allows Nginx to pass XCLIENT command.
 
 ```
 inet_interfaces = localhost
 mynetworks = 127.0.0.0/8
+smtpd_authorized_xclient_hosts = 127.0.0.0/8
 smtpd_recipient_restrictions =
 	permit_mynetworks,
 	...
