@@ -11,11 +11,11 @@ RUN mkdir -p -v /src
 WORKDIR /src
 ADD . /src
 
-RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.BuildVersion=${BUILD_VERSION}'" -v -o app .
+RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.BuildVersion=${BUILD_VERSION}'" -v -o nginx-mail-auth-http-server .
 
 
 FROM alpine:3.13
 
-COPY --from=builder /src/app app
+COPY --from=builder /src/nginx-mail-auth-http-server nginx-mail-auth-http-server
 
-ENTRYPOINT ["./app"]
+ENTRYPOINT ["./nginx-mail-auth-http-server"]
