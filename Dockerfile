@@ -11,7 +11,7 @@ RUN mkdir -p -v /src
 WORKDIR /src
 ADD . /src
 
-RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.buildVersion=${BUILD_VERSION}'" -v -o app .
+RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.BuildVersion=${BUILD_VERSION}'" -v -o app .
 
 
 FROM alpine:3.13

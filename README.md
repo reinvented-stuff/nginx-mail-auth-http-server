@@ -2,6 +2,17 @@
 
 work in progress
 
+## Usage
+
+```
+./nginx-mail-auth-http-server -h
+Usage of ./nginx-mail-auth-http-server:
+  -config string
+    	Path to configuration file (default "nginx-mail-auth-http-server.conf")
+  -version
+    	Show version
+```
+
 # Nginx configuration
 
 nginx should be listening on 25/tcp port of your mail server.
@@ -62,10 +73,8 @@ The Auth Server shold be reachable by nginx.
 
 ```json
 {
-	"listen": {
-		"address": "127.0.0.1",
-		"port": 8080
-	},
+	"listen": "127.0.0.1:8080",
+
 	"database": {
 		"uri": "mysqluser:mysqlpass@tcp(127.0.0.1:3306)/postfix",
 		"auth_lookup_query": "SELECT '127.0.0.1' as address, 25 as port;",
@@ -93,3 +102,7 @@ FROM transport
 JOIN account ON account.transport_id = transport.id 
 WHERE account.username = :user AND account.password = MD5(:pass);
 ```
+
+# IPv6 support
+
+To be done.

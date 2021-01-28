@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -30,6 +29,7 @@ type DatabaseStruct struct {
 }
 
 type ConfigurationStruct struct {
+	Listen   string         `json:"listen"`
 	Database DatabaseStruct `json:"database"`
 }
 
@@ -261,16 +261,12 @@ func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	log.Debug().Msg("Logger initialised")
 
-	addressPtr := flag.String("address", "127.0.0.1", "Address to listen")
-	portPtr := flag.String("port", "8080", "Port to listen")
 	configPtr := flag.String("config", "nginx-mail-auth-http-server.conf", "Path to configuration file")
 	showVersionPtr := flag.Bool("version", false, "Show version")
 
 	ReadConfigurationFile(*configPtr, &Configuration)
 
 	flag.Parse()
-	flagParams.address = *addressPtr
-	flagParams.port = *portPtr
 
 	if *showVersionPtr {
 		fmt.Printf("%s\n", ApplicationDescription)
@@ -311,13 +307,8 @@ func main() {
 		log.Info().Msg("Database ping ok")
 	}
 
-	var listenAddress strings.Builder
-	listenAddress.WriteString(flagParams.address)
-	listenAddress.WriteString(":")
-	listenAddress.WriteString(flagParams.port)
-
 	srv := &http.Server{
-		Addr:         listenAddress.String(),
+		Addr:         Configuration.Listen,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
