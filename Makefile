@@ -20,7 +20,7 @@ $(TARGZ_FILENAME):
 	tar -zvcf "$(TARGZ_FILENAME)" "$(PROGNAME_VERSION)"
 
 $(PROGNAME):
-	env GOOS="$(PLATFORM)" $(GO) build -ldflags="-X 'main.buildVersion=$(VERSION)'" -v -o "$(PROGNAME)" .
+	env GOOS="$(PLATFORM)" $(GO) build -ldflags="-X 'main.BuildVersion=$(VERSION)'" -v -o "$(PROGNAME)" .
 
 test:
 	@echo "Not implemented yet"
