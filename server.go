@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -89,6 +90,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 	result = authResultStruct{}
 
+	var nonVERPAddress bytes.Buffer
 	var query string
 	var queryParams = QueryParamsStruct{
 		User:     user,
@@ -107,12 +109,19 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			Str("rcptTo", rcptTo).
 			Msg("Authenticating by relay access")
 
-		mailHeaderRegex := regexp.MustCompile("<(.*?)>")
+		mailHeaderRegex := regexp.MustCompile(`<(.*?)(\+.*?)?@(.*?)>`)
 		mailFromEmailMatch := mailHeaderRegex.FindStringSubmatch(mailFrom)
 		rcptToEmailMatch := mailHeaderRegex.FindStringSubmatch(rcptTo)
 
-		if len(mailFromEmailMatch) == 2 {
-			queryParams.MailFrom = mailFromEmailMatch[1]
+		if len(mailFromEmailMatch) == 4 {
+
+			nonVERPAddress.WriteString(mailFromEmailMatch[1])
+			nonVERPAddress.WriteString("@")
+			nonVERPAddress.WriteString(mailFromEmailMatch[3])
+
+			queryParams.MailFrom = nonVERPAddress.String()
+
+			nonVERPAddress.Reset()
 
 		} else {
 			log.Error().
@@ -128,8 +137,15 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		}
 
-		if len(rcptToEmailMatch) == 2 {
-			queryParams.RcptTo = rcptToEmailMatch[1]
+		if len(rcptToEmailMatch) == 4 {
+
+			nonVERPAddress.WriteString(rcptToEmailMatch[1])
+			nonVERPAddress.WriteString("@")
+			nonVERPAddress.WriteString(rcptToEmailMatch[3])
+
+			queryParams.RcptTo = nonVERPAddress.String()
+
+			nonVERPAddress.Reset()
 
 		} else {
 			log.Error().
