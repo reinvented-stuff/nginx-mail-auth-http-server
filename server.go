@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -66,9 +67,27 @@ type QueryParamsStruct struct {
 	MailFrom string `db:"MailFrom"`
 }
 
+type MetricsStruct struct {
+	AuthRequests        int32
+	AuthRequestsFailed  int32
+	AuthRequestsSuccess int32
+	AuthRequestsRelay   int32
+	AuthRequestsLogin   int32
+	InternalErrors      int32
+}
+
 var Configuration = ConfigurationStruct{}
 var handleSignalParams = handleSignalParamsStruct{}
 var flagParams = flagParamsStruct{}
+
+var Metrics = MetricsStruct{
+	AuthRequests:        0,
+	AuthRequestsFailed:  0,
+	AuthRequestsSuccess: 0,
+	AuthRequestsRelay:   0,
+	AuthRequestsLogin:   0,
+	InternalErrors:      0,
+}
 
 func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
 
@@ -108,6 +127,9 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		pass == "" &&
 		mailFrom != "" &&
 		rcptTo != "" {
+
+		_ = atomic.AddInt32(&Metrics.AuthRequestsRelay, 1)
+
 		log.Info().
 			Str("protocol", protocol).
 			Str("mailFrom", mailFrom).
@@ -129,6 +151,9 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			nonVERPAddress.Reset()
 
 		} else {
+
+			_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
+
 			log.Error().
 				Str("mailFrom", mailFrom).
 				Int("mailFromEmailMatchLen", len(mailFromEmailMatch)).
@@ -153,6 +178,9 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			nonVERPAddress.Reset()
 
 		} else {
+
+			_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
+
 			log.Error().
 				Str("rcptTo", rcptTo).
 				Int("rcptToEmailMatchLen", len(rcptToEmailMatch)).
@@ -177,6 +205,8 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 	} else {
 
+		_ = atomic.AddInt32(&Metrics.AuthRequestsLogin, 1)
+
 		log.Info().
 			Str("protocol", protocol).
 			Str("user", user).
@@ -193,6 +223,9 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 	queryResult, err := DB.NamedQuery(query, queryParams)
 
 	if err != nil {
+
+		_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
+
 		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
 
 		result.AuthStatus = "Temporary server problem, try again later"
@@ -216,7 +249,10 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		var upstream = UpstreamStruct{}
 
 		if err = queryResult.StructScan(&upstream); err != nil {
-			log.Fatal().Err(err).Msgf("Error while scanning query results")
+
+			_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
+
+			log.Error().Err(err).Msgf("Error while scanning query results")
 
 			result.AuthStatus = "Temporary server problem, try again later"
 			result.AuthErrorCode = "451 4.3.0"
@@ -292,7 +328,23 @@ func handlerIndex(rw http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(rw, "%s v%s\n", html.EscapeString(ApplicationDescription), html.EscapeString(BuildVersion))
 }
 
+func handlerMetrics(rw http.ResponseWriter, req *http.Request) {
+
+	fmt.Fprintf(rw, "# TYPE AuthRequests counter\n")
+	fmt.Fprintf(rw, "AuthRequests{result=\"started\"} %v\n", Metrics.AuthRequests)
+	fmt.Fprintf(rw, "AuthRequests{result=\"fail\"} %v\n", Metrics.AuthRequestsFailed)
+	fmt.Fprintf(rw, "AuthRequests{result=\"success\"} %v\n", Metrics.AuthRequestsSuccess)
+	fmt.Fprintf(rw, "AuthRequests{kind=\"relay\"} %v\n", Metrics.AuthRequestsRelay)
+	fmt.Fprintf(rw, "AuthRequests{kind=\"login\"} %v\n", Metrics.AuthRequestsLogin)
+
+	fmt.Fprintf(rw, "# TYPE InternalErrors counter\n")
+	fmt.Fprintf(rw, "InternalErrors %v\n", Metrics.InternalErrors)
+
+}
+
 func handlerAuth(rw http.ResponseWriter, req *http.Request) {
+
+	_ = atomic.AddInt32(&Metrics.AuthRequests, 1)
 
 	authMethod := req.Header.Get("Auth-Method")
 	authUser := req.Header.Get("Auth-User")
@@ -321,6 +373,9 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 
 	success, result, err := authenticate(authUser, authPass, authProtocol, authSMTPFrom, authSMTPTo)
 	if err != nil {
+
+		_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
+
 		log.Error().
 			Err(err).
 			Str("event", "auth").
@@ -330,6 +385,8 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Auth-Status", result.AuthStatus)
 
 	if success {
+
+		_ = atomic.AddInt32(&Metrics.AuthRequestsSuccess, 1)
 
 		log.Info().
 			Str("authMethod", authMethod).
@@ -355,6 +412,8 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		rw.Header().Set("Auth-Port", strconv.Itoa(result.AuthPort))
 
 	} else {
+
+		_ = atomic.AddInt32(&Metrics.AuthRequestsFailed, 1)
 
 		log.Info().
 			Str("authMethod", authMethod).
@@ -442,6 +501,7 @@ func main() {
 
 	http.HandleFunc("/", handlerIndex)
 	http.HandleFunc("/auth", handlerAuth)
+	http.HandleFunc("/metrics", handlerMetrics)
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal().Err(err).Msgf("HTTP server ListenAndServe: %v", err)
