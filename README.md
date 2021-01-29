@@ -194,6 +194,23 @@ WHERE account.username = :User AND account.password = MD5(:Pass);
 
 Currently the server strips everything from the first found "+" symbol until the first "@" symbol.
 
+# Prometheus exporter
+
+There is a `/metrics` endpoint with a few things:
+
+```
+# TYPE AuthRequests counter
+AuthRequests{result="started"} 39683
+AuthRequests{result="fail"} 39619
+AuthRequests{result="success"} 64
+AuthRequests{kind="relay"} 72
+AuthRequests{kind="login"} 39611
+
+# TYPE InternalErrors counter
+InternalErrors 0
+```
+
 # IPv6 support
 
 To be done.
+
