@@ -407,7 +407,11 @@ func handlerMetrics(rw http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(rw, "# TYPE AuthRequests counter\n")
 	fmt.Fprintf(rw, "AuthRequests{result=\"started\"} %v\n", Metrics.AuthRequests)
 	fmt.Fprintf(rw, "AuthRequests{result=\"fail\"} %v\n", Metrics.AuthRequestsFailed)
+	fmt.Fprintf(rw, "AuthRequests{result=\"fail_relay\"} %v\n", Metrics.AuthRequestsFailedRelay)
+	fmt.Fprintf(rw, "AuthRequests{result=\"fail_login\"} %v\n", Metrics.AuthRequestsFailedLogin)
 	fmt.Fprintf(rw, "AuthRequests{result=\"success\"} %v\n", Metrics.AuthRequestsSuccess)
+	fmt.Fprintf(rw, "AuthRequests{result=\"success_relay\"} %v\n", Metrics.AuthRequestsSuccessRelay)
+	fmt.Fprintf(rw, "AuthRequests{result=\"success_login\"} %v\n", Metrics.AuthRequestsSuccessLogin)
 	fmt.Fprintf(rw, "AuthRequests{kind=\"relay\"} %v\n", Metrics.AuthRequestsRelay)
 	fmt.Fprintf(rw, "AuthRequests{kind=\"login\"} %v\n", Metrics.AuthRequestsLogin)
 
