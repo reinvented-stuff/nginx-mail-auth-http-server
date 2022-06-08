@@ -1,4 +1,4 @@
-FROM golang:1.14.12-alpine AS builder
+FROM golang:1.18.1-alpine AS builder
 
 ARG BUILD_VERSION=0.0.0
 ARG TARGETOS=linux
@@ -11,10 +11,11 @@ RUN mkdir -p -v /src
 WORKDIR /src
 ADD . /src
 
+RUN apk add git
 RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.BuildVersion=${BUILD_VERSION}'" -v -o nginx-mail-auth-http-server .
 
 
-FROM alpine:3.13
+FROM alpine:3.15
 
 COPY --from=builder /src/nginx-mail-auth-http-server nginx-mail-auth-http-server
 

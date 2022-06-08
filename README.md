@@ -40,6 +40,8 @@ work in progress
 Usage of ./nginx-mail-auth-http-server:
   -config string
     	Path to configuration file (default "nginx-mail-auth-http-server.conf")
+  -verbose
+      Verbose output
   -version
     	Show version
 ```
@@ -59,7 +61,7 @@ docker run \
   --tty \
   --name nginx-mail-auth-http-server \
   -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
-  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.3.0"
+  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.4.0"
 ```
 
 ```bash
@@ -71,7 +73,7 @@ podman run \
   --tty \
   --name nginx-mail-auth-http-server \
   -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
-  "quay.io/reinventedstuff/nginx-mail-auth-http-server:1.3.0"
+  "quay.io/reinventedstuff/nginx-mail-auth-http-server:1.4.0"
 ```
 
 # Nginx configuration
@@ -161,7 +163,6 @@ The Auth Server shold be reachable by nginx.
 ```json
 {
 	"listen": "127.0.0.1:8080",
-
 	"database": {
 		"uri": "mysqluser:mysqlpass@tcp(127.0.0.1:3306)/postfix",
 		"auth_lookup_query": "SELECT '127.0.0.1' as address, 25 as port;",
@@ -200,14 +201,18 @@ There is a `/metrics` endpoint with a few things:
 
 ```
 # TYPE AuthRequests counter
-AuthRequests{result="started"} 39683
-AuthRequests{result="fail"} 39619
-AuthRequests{result="success"} 64
-AuthRequests{kind="relay"} 72
-AuthRequests{kind="login"} 39611
+AuthRequests{result="started"} 59203
+AuthRequests{result="fail"} 15483
+AuthRequests{result="fail_relay"} 282
+AuthRequests{result="fail_login"} 8411
+AuthRequests{result="success"} 2694
+AuthRequests{result="success_relay"} 494
+AuthRequests{result="success_login"} 2200
+AuthRequests{kind="relay"} 776
+AuthRequests{kind="login"} 10611
 
 # TYPE InternalErrors counter
-InternalErrors 0
+InternalErrors 52
 ```
 
 # IPv6 support
