@@ -25,6 +25,7 @@ import (
 var ApplicationDescription = "Nginx Mail Auth HTTP Server"
 var BuildVersion = "0.0.0"
 var DB *sqlx.DB
+var DebugMetricsNotifierPeriod time.Duration = 300
 
 type DatabaseStruct struct {
 	URI              string `json:"uri"`
@@ -34,6 +35,7 @@ type DatabaseStruct struct {
 
 type ConfigurationStruct struct {
 	Listen   string         `json:"listen"`
+	Logfile  string         `json:"logfile"`
 	Database DatabaseStruct `json:"database"`
 }
 
@@ -53,6 +55,8 @@ type authResultStruct struct {
 	AuthPort      int
 	AuthWait      string
 	AuthErrorCode string
+	AuthViaRelay  bool
+	AuthViaLogin  bool
 }
 
 type UpstreamStruct struct {
@@ -68,12 +72,16 @@ type QueryParamsStruct struct {
 }
 
 type MetricsStruct struct {
-	AuthRequests        int32
-	AuthRequestsFailed  int32
-	AuthRequestsSuccess int32
-	AuthRequestsRelay   int32
-	AuthRequestsLogin   int32
-	InternalErrors      int32
+	AuthRequests             int32
+	AuthRequestsFailed       int32
+	AuthRequestsFailedRelay  int32
+	AuthRequestsFailedLogin  int32
+	AuthRequestsSuccess      int32
+	AuthRequestsSuccessRelay int32
+	AuthRequestsSuccessLogin int32
+	AuthRequestsRelay        int32
+	AuthRequestsLogin        int32
+	InternalErrors           int32
 }
 
 var Configuration = ConfigurationStruct{}
@@ -81,12 +89,36 @@ var handleSignalParams = handleSignalParamsStruct{}
 var flagParams = flagParamsStruct{}
 
 var Metrics = MetricsStruct{
-	AuthRequests:        0,
-	AuthRequestsFailed:  0,
-	AuthRequestsSuccess: 0,
-	AuthRequestsRelay:   0,
-	AuthRequestsLogin:   0,
-	InternalErrors:      0,
+	AuthRequests:             0,
+	AuthRequestsFailed:       0,
+	AuthRequestsFailedRelay:  0,
+	AuthRequestsFailedLogin:  0,
+	AuthRequestsSuccess:      0,
+	AuthRequestsSuccessRelay: 0,
+	AuthRequestsSuccessLogin: 0,
+	AuthRequestsRelay:        0,
+	AuthRequestsLogin:        0,
+	InternalErrors:           0,
+}
+
+func MetricsNotifier() {
+	go func() {
+		for {
+			time.Sleep(DebugMetricsNotifierPeriod * time.Second)
+			log.Debug().
+				Int32("AuthRequests", Metrics.AuthRequests).
+				Int32("AuthRequestsFailed", Metrics.AuthRequestsFailed).
+				Int32("AuthRequestsFailedRelay", Metrics.AuthRequestsFailedRelay).
+				Int32("AuthRequestsFailedLogin", Metrics.AuthRequestsFailedLogin).
+				Int32("AuthRequestsSuccess", Metrics.AuthRequestsSuccess).
+				Int32("AuthRequestsSuccessRelay", Metrics.AuthRequestsSuccessRelay).
+				Int32("AuthRequestsSuccessLogin", Metrics.AuthRequestsSuccessLogin).
+				Int32("AuthRequestsRelay", Metrics.AuthRequestsRelay).
+				Int32("AuthRequestsLogin", Metrics.AuthRequestsLogin).
+				Int32("InternalErrors", Metrics.InternalErrors).
+				Msg("Metrics")
+		}
+	}()
 }
 
 func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct) {
@@ -123,6 +155,14 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		MailFrom: "",
 	}
 
+	log.Info().
+		Str("user", user).
+		Str("pass", pass).
+		Str("protocol", protocol).
+		Str("mailFrom", mailFrom).
+		Str("rcptTo", rcptTo).
+		Msgf("Processing authentication request")
+
 	if user == "" &&
 		pass == "" &&
 		mailFrom != "" &&
@@ -130,11 +170,13 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		_ = atomic.AddInt32(&Metrics.AuthRequestsRelay, 1)
 
+		result.AuthViaRelay = true
+
 		log.Info().
 			Str("protocol", protocol).
 			Str("mailFrom", mailFrom).
 			Str("rcptTo", rcptTo).
-			Msg("Authenticating by relay access")
+			Msg("Authenticating by relay access ('user' and 'pass' are empty)")
 
 		mailHeaderRegex := regexp.MustCompile(`<(.*?)(\+.*?)?@(.*?)>`)
 		mailFromEmailMatch := mailHeaderRegex.FindStringSubmatch(mailFrom)
@@ -147,6 +189,11 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			nonVERPAddress.WriteString(mailFromEmailMatch[3])
 
 			queryParams.MailFrom = nonVERPAddress.String()
+
+			log.Debug().
+				Str("queryParams.MailFrom", queryParams.MailFrom).
+				Str("mailFrom", mailFrom).
+				Msgf("Fetched an email address out of mailFrom header (VERP section stripped)")
 
 			nonVERPAddress.Reset()
 
@@ -174,6 +221,11 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			nonVERPAddress.WriteString(rcptToEmailMatch[3])
 
 			queryParams.RcptTo = nonVERPAddress.String()
+
+			log.Debug().
+				Str("queryParams.RcptTo", queryParams.RcptTo).
+				Str("rcptTo", rcptTo).
+				Msgf("Fetched an email address out of rcptTo header (VERP section stripped)")
 
 			nonVERPAddress.Reset()
 
@@ -203,9 +255,14 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		query = Configuration.Database.RelayLookupQuery
 
-	} else {
+	} else if user != "" &&
+		pass != "" &&
+		mailFrom != "" &&
+		rcptTo != "" {
 
 		_ = atomic.AddInt32(&Metrics.AuthRequestsLogin, 1)
+
+		result.AuthViaRelay = true
 
 		log.Info().
 			Str("protocol", protocol).
@@ -214,11 +271,28 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			Msg("Authenticating by credentials")
 
 		query = Configuration.Database.AuthLookupQuery
+
+	} else {
+		_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
+
+		log.Error().
+			Str("User", queryParams.User).
+			Str("Pass", queryParams.Pass).
+			Str("MailFrom", queryParams.MailFrom).
+			Str("RcptTo", queryParams.RcptTo).
+			Msg("Can't authenticate via relay nor login")
+
+		result.AuthStatus = "Temporary server problem, try again later"
+		result.AuthErrorCode = "451 4.3.0"
+		result.AuthWait = "5"
+
+		return false, result, err
+
 	}
 
 	log.Debug().
 		Str("query", query).
-		Msg("Lookup query")
+		Msg("Lookup query prepared")
 
 	queryResult, err := DB.NamedQuery(query, queryParams)
 
@@ -226,7 +300,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
 
-		log.Error().Err(err).Msgf("Error while preparing query: %v", err)
+		log.Error().Err(err).Msgf("Error while executing query: %v", err)
 
 		result.AuthStatus = "Temporary server problem, try again later"
 		result.AuthErrorCode = "451 4.3.0"
@@ -244,7 +318,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			Str("pass", pass).
 			Str("mailFrom", mailFrom).
 			Str("rcptTo", rcptTo).
-			Msgf("Found results after lookup")
+			Msgf("Found results after lookup query execution")
 
 		var upstream = UpstreamStruct{}
 
@@ -252,7 +326,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 			_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
 
-			log.Error().Err(err).Msgf("Error while scanning query results")
+			log.Error().Err(err).Msgf("Error while parsing lookup query result")
 
 			result.AuthStatus = "Temporary server problem, try again later"
 			result.AuthErrorCode = "451 4.3.0"
@@ -261,7 +335,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			return false, result, err
 
 		} else {
-			log.Debug().Msgf("Successfully scanned query results")
+			log.Debug().Msgf("Lookup query results parsed successfully")
 		}
 
 		log.Info().
@@ -384,9 +458,29 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 
 	rw.Header().Set("Auth-Status", result.AuthStatus)
 
+	log.Debug().
+		Str("AuthStatus", result.AuthStatus).
+		Str("AuthServer", result.AuthServer).
+		Int("AuthPort", result.AuthPort).
+		Str("AuthWait", result.AuthWait).
+		Str("AuthErrorCode", result.AuthErrorCode).
+		Bool("AuthViaRelay", result.AuthViaRelay).
+		Bool("AuthViaLogin", result.AuthViaLogin).
+		Msgf("Got result from authentication function")
+
 	if success {
 
+		log.Debug().
+			Msgf("Registering successful authentication in metrics")
+
 		_ = atomic.AddInt32(&Metrics.AuthRequestsSuccess, 1)
+
+		if result.AuthViaRelay {
+			_ = atomic.AddInt32(&Metrics.AuthRequestsSuccessRelay, 1)
+
+		} else if result.AuthViaLogin {
+			_ = atomic.AddInt32(&Metrics.AuthRequestsSuccessLogin, 1)
+		}
 
 		log.Info().
 			Str("authMethod", authMethod).
@@ -414,6 +508,13 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	} else {
 
 		_ = atomic.AddInt32(&Metrics.AuthRequestsFailed, 1)
+
+		if result.AuthViaRelay {
+			_ = atomic.AddInt32(&Metrics.AuthRequestsFailedRelay, 1)
+
+		} else if result.AuthViaLogin {
+			_ = atomic.AddInt32(&Metrics.AuthRequestsFailedLogin, 1)
+		}
 
 		log.Info().
 			Str("authMethod", authMethod).
@@ -447,6 +548,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 func init() {
 
 	configPtr := flag.String("config", "nginx-mail-auth-http-server.conf", "Path to configuration file")
+	verbosePtr := flag.Bool("verbose", false, "Verbose output")
 	showVersionPtr := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
@@ -456,7 +558,13 @@ func init() {
 		os.Exit(0)
 	}
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	if *verbosePtr {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		MetricsNotifier()
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	}
+
 	log.Debug().Msg("Logger initialised")
 
 	ReadConfigurationFile(*configPtr, &Configuration)
