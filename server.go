@@ -165,7 +165,6 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 	if user == "" &&
 		pass == "" &&
-		mailFrom != "" &&
 		rcptTo != "" {
 
 		_ = atomic.AddInt32(&Metrics.AuthRequestsRelay, 1)
@@ -182,36 +181,18 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		mailFromEmailMatch := mailHeaderRegex.FindStringSubmatch(mailFrom)
 		rcptToEmailMatch := mailHeaderRegex.FindStringSubmatch(rcptTo)
 
-		if len(mailFromEmailMatch) == 4 {
-
-			nonVERPAddress.WriteString(mailFromEmailMatch[1])
-			nonVERPAddress.WriteString("@")
-			nonVERPAddress.WriteString(mailFromEmailMatch[3])
-
-			queryParams.MailFrom = nonVERPAddress.String()
-
-			log.Debug().
-				Str("queryParams.MailFrom", queryParams.MailFrom).
+		if len(mailFromEmailMatch) != 4 {
+			log.Warn().
 				Str("mailFrom", mailFrom).
-				Msgf("Fetched an email address out of mailFrom header (VERP section stripped)")
-
-			nonVERPAddress.Reset()
+				Str("rcptTo", rcptTo).
+				Msgf("MAIL FROM is empty (could be incoming bounce)")
 
 		} else {
+			nonVERPAddress.WriteString(rcptToEmailMatch[1])
+			nonVERPAddress.WriteString("@")
+			nonVERPAddress.WriteString(rcptToEmailMatch[3])
 
-			_ = atomic.AddInt32(&Metrics.InternalErrors, 1)
-
-			log.Error().
-				Str("mailFrom", mailFrom).
-				Int("mailFromEmailMatchLen", len(mailFromEmailMatch)).
-				Msg("Can't parse MAIL FROM command")
-
-			result.AuthStatus = "Temporary server problem, try again later"
-			result.AuthErrorCode = "451 4.3.0"
-			result.AuthWait = "5"
-
-			return false, result, err
-
+			queryParams.MailFrom = nonVERPAddress.String()
 		}
 
 		if len(rcptToEmailMatch) == 4 {
@@ -236,7 +217,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			log.Error().
 				Str("rcptTo", rcptTo).
 				Int("rcptToEmailMatchLen", len(rcptToEmailMatch)).
-				Msg("Can't parse RCPT TO command")
+				Msg("Can't parse MAIL FROM command")
 
 			result.AuthStatus = "Temporary server problem, try again later"
 			result.AuthErrorCode = "451 4.3.0"
