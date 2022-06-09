@@ -186,6 +186,13 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 				Str("mailFrom", mailFrom).
 				Str("rcptTo", rcptTo).
 				Msgf("MAIL FROM is empty (could be incoming bounce)")
+
+		} else {
+			nonVERPAddress.WriteString(rcptToEmailMatch[1])
+			nonVERPAddress.WriteString("@")
+			nonVERPAddress.WriteString(rcptToEmailMatch[3])
+
+			queryParams.MailFrom = nonVERPAddress.String()
 		}
 
 		if len(rcptToEmailMatch) == 4 {
