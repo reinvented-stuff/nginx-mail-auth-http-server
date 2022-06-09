@@ -255,10 +255,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		query = Configuration.Database.RelayLookupQuery
 
-	} else if user != "" &&
-		pass != "" &&
-		mailFrom != "" &&
-		rcptTo != "" {
+	} else if user != "" {
 
 		_ = atomic.AddInt32(&Metrics.AuthRequestsLogin, 1)
 
