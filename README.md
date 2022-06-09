@@ -16,7 +16,7 @@ work in progress
 
       +-------------+           +---------------+          +--------------+
       |             |           |               |          |              |
-      |   Postfix   <----7------+     Nginx     <----2-----+    Gmail     |
+      |     MTA     <----7------+     Nginx     <----2-----+    Gmail     |
       |             |   SMTP    |               |   SMTP   |              |
       +-------------+           +-----^---+-----+          +------^-------+
                                       |   |                       |
@@ -61,7 +61,7 @@ docker run \
   --tty \
   --name nginx-mail-auth-http-server \
   -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
-  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.4.0"
+  "docker.pkg.github.com/reinvented-stuff/nginx-mail-auth-http-server/nginx-mail-auth-http-server:1.4.2"
 ```
 
 ```bash
@@ -73,10 +73,10 @@ podman run \
   --tty \
   --name nginx-mail-auth-http-server \
   -v /opt/nginx-mail-auth-http-server.conf:/nginx-mail-auth-http-server.conf:ro \
-  "quay.io/reinventedstuff/nginx-mail-auth-http-server:1.4.0"
+  "quay.io/reinventedstuff/nginx-mail-auth-http-server:1.4.2"
 ```
 
-# Nginx configuration
+# Nginx
 
 nginx should be listening on 25/tcp port of your mail server.
 
@@ -120,11 +120,13 @@ mail {
 
 ```
 
-# Postfix configuration
+# MTA 
+
+## Postfix configuration
 
 postfix is supposed to be listening a different port from the one nginx does listen.
 
-## main.cf
+### main.cf
 
 `mynetworks` should contain your nginx host. This will let postfix accept all mail from nginx.
 `smtpd_authorized_xclient_hosts` should contain your nginx host. This allows Nginx to pass XCLIENT command.
@@ -138,7 +140,7 @@ smtpd_recipient_restrictions =
 	...
 ```
 
-## master.cf
+### master.cf
 
 To make postfix listen on a custom port you can comment out the default `smtp ...` line and add a new one as proposed below.
 
