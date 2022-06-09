@@ -259,7 +259,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		_ = atomic.AddInt32(&Metrics.AuthRequestsLogin, 1)
 
-		result.AuthViaRelay = true
+		result.AuthViaLogin = true
 
 		log.Info().
 			Str("protocol", protocol).
