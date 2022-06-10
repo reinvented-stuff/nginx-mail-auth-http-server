@@ -199,6 +199,8 @@ Currently the server strips everything from the first found "+" symbol until the
 
 # Prometheus exporter
 
+Grafana dashboard: [https://grafana.com/grafana/dashboards/16427](https://grafana.com/grafana/dashboards/16427)
+
 There is a `/metrics` endpoint with a few things:
 
 ```
