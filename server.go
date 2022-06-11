@@ -142,6 +142,14 @@ func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct)
 
 }
 
+func WrapSecret(secret string) (result string) {
+	if log.Debug().Enabled() {
+		return secret
+	} else {
+		return "***"
+	}
+}
+
 func authenticate(user string, pass string, protocol string, mailFrom string, rcptTo string) (success bool, result authResultStruct, err error) {
 
 	result = authResultStruct{}
@@ -157,7 +165,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 	log.Info().
 		Str("user", user).
-		Str("pass", pass).
+		Str("pass", WrapSecret(pass)).
 		Str("protocol", protocol).
 		Str("mailFrom", mailFrom).
 		Str("rcptTo", rcptTo).
@@ -245,7 +253,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		log.Info().
 			Str("protocol", protocol).
 			Str("user", user).
-			Str("pass", pass).
+			Str("pass", WrapSecret(pass)).
 			Msg("Authenticating by credentials")
 
 		query = Configuration.Database.AuthLookupQuery
@@ -319,7 +327,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 		log.Info().
 			Str("protocol", protocol).
 			Str("user", user).
-			Str("pass", pass).
+			Str("pass", WrapSecret(pass)).
 			Str("mailFrom", mailFrom).
 			Str("rcptTo", rcptTo).
 			Str("upstreamAddress", upstream.Address).
@@ -337,7 +345,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 	log.Info().
 		Str("protocol", protocol).
 		Str("user", user).
-		Str("pass", pass).
+		Str("pass", WrapSecret(pass)).
 		Str("mailFrom", mailFrom).
 		Str("rcptTo", rcptTo).
 		Msgf("No results after lookup")
@@ -416,7 +424,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 	log.Info().
 		Str("authMethod", authMethod).
 		Str("authUser", authUser).
-		Str("authPass", authPass).
+		Str("authPass", WrapSecret(authPass)).
 		Str("authProtocol", authProtocol).
 		Str("authLoginAttempt", authLoginAttempt).
 		Str("clientIP", clientIP).
@@ -467,7 +475,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		log.Info().
 			Str("authMethod", authMethod).
 			Str("authUser", authUser).
-			Str("authPass", authPass).
+			Str("authPass", WrapSecret(authPass)).
 			Str("authProtocol", authProtocol).
 			Str("authLoginAttempt", authLoginAttempt).
 			Str("clientIP", clientIP).
@@ -501,7 +509,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		log.Info().
 			Str("authMethod", authMethod).
 			Str("authUser", authUser).
-			Str("authPass", authPass).
+			Str("authPass", WrapSecret(authPass)).
 			Str("authProtocol", authProtocol).
 			Str("authLoginAttempt", authLoginAttempt).
 			Str("clientIP", clientIP).

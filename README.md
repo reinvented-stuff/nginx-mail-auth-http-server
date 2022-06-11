@@ -46,6 +46,8 @@ Usage of ./nginx-mail-auth-http-server:
     	Show version
 ```
 
+**ATTENTION**: In the verbose mode all passwords will be logged!
+
 ## Run in Docker/Podman
 
 We currently publish docker images on [github](https://github.com/reinvented-stuff/nginx-mail-auth-http-server/packages/586191) and [quay.io](https://quay.io/repository/reinventedstuff/nginx-mail-auth-http-server).
