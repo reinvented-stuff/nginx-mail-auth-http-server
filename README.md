@@ -39,14 +39,14 @@ work in progress
 ./nginx-mail-auth-http-server -h
 Usage of ./nginx-mail-auth-http-server:
   -config string
-    	Path to configuration file (default "nginx-mail-auth-http-server.conf")
+      Path to configuration file (default "nginx-mail-auth-http-server.conf")
+  -log-secrets
+      Show plaintext passwords in logs
   -verbose
       Verbose output
   -version
-    	Show version
+      Show version
 ```
-
-**ATTENTION**: In the verbose mode all passwords will be logged!
 
 ## Run in Docker/Podman
 

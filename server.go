@@ -26,6 +26,7 @@ var ApplicationDescription = "Nginx Mail Auth HTTP Server"
 var BuildVersion = "0.0.0"
 var DB *sqlx.DB
 var DebugMetricsNotifierPeriod time.Duration = 300
+var ShowSecretsInLog = false
 
 type DatabaseStruct struct {
 	URI              string `json:"uri"`
@@ -143,7 +144,7 @@ func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct)
 }
 
 func WrapSecret(secret string) (result string) {
-	if log.Debug().Enabled() {
+	if ShowSecretsInLog {
 		return secret
 	} else {
 		return "***"
@@ -237,7 +238,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		log.Debug().
 			Str("User", queryParams.User).
-			Str("Pass", queryParams.Pass).
+			Str("Pass", WrapSecret(queryParams.Pass)).
 			Str("MailFrom", queryParams.MailFrom).
 			Str("RcptTo", queryParams.RcptTo).
 			Msg("Relay lookup query parameters prepared")
@@ -263,7 +264,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 
 		log.Error().
 			Str("User", queryParams.User).
-			Str("Pass", queryParams.Pass).
+			Str("Pass", WrapSecret(queryParams.Pass)).
 			Str("MailFrom", queryParams.MailFrom).
 			Str("RcptTo", queryParams.RcptTo).
 			Msg("Can't authenticate via relay nor login")
@@ -300,7 +301,7 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 	for queryResult.Next() {
 		log.Debug().
 			Str("protocol", protocol).
-			Str("user", user).
+			Str("user", WrapSecret(user)).
 			Str("pass", pass).
 			Str("mailFrom", mailFrom).
 			Str("rcptTo", rcptTo).
@@ -443,7 +444,7 @@ func handlerAuth(rw http.ResponseWriter, req *http.Request) {
 		log.Error().
 			Err(err).
 			Str("event", "auth").
-			Msgf("Can't authenticate %s:%s", authUser, authPass)
+			Msgf("Can't authenticate %s:%s", authUser, WrapSecret(authPass))
 	}
 
 	rw.Header().Set("Auth-Status", result.AuthStatus)
@@ -539,6 +540,7 @@ func init() {
 
 	configPtr := flag.String("config", "nginx-mail-auth-http-server.conf", "Path to configuration file")
 	verbosePtr := flag.Bool("verbose", false, "Verbose output")
+	logSecretsPtr := flag.Bool("log-secrets", false, "Show plaintext passwords in logs")
 	showVersionPtr := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
@@ -546,6 +548,10 @@ func init() {
 		fmt.Printf("%s\n", ApplicationDescription)
 		fmt.Printf("Version: %s\n", BuildVersion)
 		os.Exit(0)
+	}
+
+	if *logSecretsPtr {
+		ShowSecretsInLog = true
 	}
 
 	if *verbosePtr {
