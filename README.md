@@ -221,7 +221,65 @@ AuthRequests{kind="login"} 10611
 InternalErrors 52
 ```
 
+# SSL/TLS support
+
+Generate self-signed certificate:
+```bash
+openssl req -x509 \
+  -newkey rsa:4096 \
+  -subj '/CN=localhost' \
+  -nodes \
+  -keyout localhost.key \
+  -out localhost.crt \
+  -sha256 \
+  -days 9365
+```
+
+Add to the configuration file the following section:
+```json
+{
+  ...
+  "ssl": {
+    "certificate": "localhost.crt",
+    "private_key": "localhost.key"
+  }
+}
+```
+
+
 # IPv6 support
 
 To be done.
 
+
+# Test
+
+Request authentication with login and password:
+```bash
+curl -v -k \
+ -H "Auth-Method: none" \
+ -H "Auth-User: pepe_likes" \
+ -H "Auth-Pass: koalas" \
+ -H "Auth-Protocol: smtp" \
+ -H "Auth-Login-Attempt: 1" \
+ -H "Client-IP: 10.13.199.8" \
+ -H "Client-Host: [UNAVAILABLE]" \
+ -H "Auth-SMTP-Helo: pepes_workstation" \
+ -H "Auth-SMTP-From: MAIL FROM:<pepe@example.com>" \
+ -H "Auth-SMTP-To: RCPT TO:<mario@example.com>" \
+ https://127.0.0.1:8443/auth
+```
+
+Request authentication via relay:
+```bash
+curl -v -k \
+ -H "Auth-Method: none" \
+ -H "Auth-Protocol: smtp" \
+ -H "Auth-Login-Attempt: 1" \
+ -H "Client-IP: 10.13.199.8" \
+ -H "Client-Host: [UNAVAILABLE]" \
+ -H "Auth-SMTP-Helo: pepes_workstation" \
+ -H "Auth-SMTP-From: MAIL FROM:<pepe@example.com>" \
+ -H "Auth-SMTP-To: RCPT TO:<mario@example.com>" \
+ https://127.0.0.1:8443/auth
+```

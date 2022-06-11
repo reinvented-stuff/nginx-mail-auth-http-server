@@ -6,6 +6,11 @@
 		"uri": "user:pass@tcp(127.0.0.1:3306)/postfix",
 		"auth_lookup_query": "SELECT '127.0.0.1' as address, 25 as port FROM virtual_mailbox_maps WHERE email_address = :user AND password = MD5(:pass) AND is_active = 1",
 		"relay_lookup_query": "SELECT '127.0.0.1' as address, 25 as port FROM virtual_mailbox_maps WHERE email_address = :mailTo AND is_active = 1"
+	},
+
+	"ssl": {
+		"certificate": "localhost.crt",
+		"private_key": "localhost.key"
 	}
 
 }

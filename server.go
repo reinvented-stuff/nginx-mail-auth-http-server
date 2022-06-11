@@ -34,10 +34,18 @@ type DatabaseStruct struct {
 	RelayLookupQuery string `json:"relay_lookup_query"`
 }
 
+type SSLStruct struct {
+	PrivateKey  string `json:"private_key"`
+	Certificate string `json:"certificate"`
+	MinVersion  uint16 `json:"min_version"`
+	MaxVersion  uint16 `json:"max_version"`
+}
+
 type ConfigurationStruct struct {
 	Listen   string         `json:"listen"`
 	Logfile  string         `json:"logfile"`
 	Database DatabaseStruct `json:"database"`
+	SSL      *SSLStruct     `json:"ssl,omitempty"`
 }
 
 type flagParamsStruct struct {
@@ -197,11 +205,13 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 				Msgf("MAIL FROM is empty (could be incoming bounce)")
 
 		} else {
-			nonVERPAddress.WriteString(rcptToEmailMatch[1])
+			nonVERPAddress.WriteString(mailFromEmailMatch[1])
 			nonVERPAddress.WriteString("@")
-			nonVERPAddress.WriteString(rcptToEmailMatch[3])
+			nonVERPAddress.WriteString(mailFromEmailMatch[3])
 
 			queryParams.MailFrom = nonVERPAddress.String()
+
+			nonVERPAddress.Reset()
 		}
 
 		if len(rcptToEmailMatch) == 4 {
@@ -213,6 +223,11 @@ func authenticate(user string, pass string, protocol string, mailFrom string, rc
 			queryParams.RcptTo = nonVERPAddress.String()
 
 			log.Debug().
+				Str("rcptToEmailMatch[0]", rcptToEmailMatch[0]).
+				Str("rcptToEmailMatch[1]", rcptToEmailMatch[1]).
+				Str("rcptToEmailMatch[2]", rcptToEmailMatch[2]).
+				Str("rcptToEmailMatch[3]", rcptToEmailMatch[3]).
+				Str("nonVERPAddress.string()", nonVERPAddress.String()).
 				Str("queryParams.RcptTo", queryParams.RcptTo).
 				Str("rcptTo", rcptTo).
 				Msgf("Fetched an email address out of rcptTo header (VERP section stripped)")
@@ -607,8 +622,23 @@ func main() {
 	http.HandleFunc("/auth", handlerAuth)
 	http.HandleFunc("/metrics", handlerMetrics)
 
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal().Err(err).Msgf("HTTP server ListenAndServe: %v", err)
-	}
+	if Configuration.SSL != nil {
 
+		log.Debug().
+			Str("Certificate", Configuration.SSL.Certificate).
+			Str("PrivateKey", Configuration.SSL.PrivateKey).
+			Msgf("Starting server with SSL/TLS support")
+
+		if err := srv.ListenAndServeTLS(Configuration.SSL.Certificate, Configuration.SSL.PrivateKey); err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msgf("HTTP server ListenAndServeTLS: %v", err)
+		}
+
+	} else {
+
+		log.Debug().Msgf("Starting unsecure HTTP server")
+
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msgf("HTTP server ListenAndServe: %v", err)
+		}
+	}
 }
