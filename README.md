@@ -39,11 +39,13 @@ work in progress
 ./nginx-mail-auth-http-server -h
 Usage of ./nginx-mail-auth-http-server:
   -config string
-    	Path to configuration file (default "nginx-mail-auth-http-server.conf")
+      Path to configuration file (default "nginx-mail-auth-http-server.conf")
+  -log-secrets
+      Show plaintext passwords in logs
   -verbose
       Verbose output
   -version
-    	Show version
+      Show version
 ```
 
 ## Run in Docker/Podman
@@ -198,6 +200,8 @@ WHERE account.username = :User AND account.password = MD5(:Pass);
 Currently the server strips everything from the first found "+" symbol until the first "@" symbol.
 
 # Prometheus exporter
+
+Grafana dashboard: [https://grafana.com/grafana/dashboards/16427](https://grafana.com/grafana/dashboards/16427)
 
 There is a `/metrics` endpoint with a few things:
 
