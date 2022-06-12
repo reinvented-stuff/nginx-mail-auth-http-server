@@ -161,12 +161,11 @@ jobs:
         uses: rest-gateway/notification-action@master
         with:
           message: |
-            <b>Build ${{env.APP_NAME}}:</b>
-            ${{env.PLANNED_VERSION}}${{ steps.version_suffix.outputs.long }}
+            <b>Build ${{env.APP_NAME}}:</b> ${{env.PLANNED_VERSION}}${{ steps.version_suffix.outputs.long }}
 
             <b>Docker image:</b>
             docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}
-            quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
+            quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}
 
           recipient: "${{ secrets.NOTIFICATIONS_DEFAULT_RECIPIENT }}"
           rest_gateway_url: "${{ secrets.REST_GATEWAY_API_URL }}"
