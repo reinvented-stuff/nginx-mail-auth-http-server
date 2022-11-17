@@ -44,25 +44,6 @@ var handleSignalParams = handleSignalParamsStruct{}
 
 var MetricsNotifierPeriod int = 60
 
-// var Metrics = metrics.MetricsStruct{
-// 	AuthRequests:             0,
-// 	AuthRequestsFailed:       0,
-// 	AuthRequestsFailedRelay:  0,
-// 	AuthRequestsFailedLogin:  0,
-// 	AuthRequestsSuccess:      0,
-// 	AuthRequestsSuccessRelay: 0,
-// 	AuthRequestsSuccessLogin: 0,
-// 	AuthRequestsRelay:        0,
-// 	AuthRequestsLogin:        0,
-// 	InternalErrors:           0,
-
-// 	Entities: make(map[string]int32),
-// }
-
-var Lookup = lookup.LookupStruct{
-	ShowSecretsInLog: Debug,
-}
-
 var ctx = context.Background()
 var flake = sonyflake.NewSonyflake(sonyflake.Settings{})
 var DB *sqlx.DB
@@ -72,8 +53,6 @@ var httpHandlers = handlers.Handlers{
 	BuildVersion:           BuildVersion,
 	DB:                     DB,
 	Flake:                  flake,
-	MetricsCounter:         &metrics.Metrics,
-	Lookup:                 &Lookup,
 }
 
 func MetricsNotifier() {
