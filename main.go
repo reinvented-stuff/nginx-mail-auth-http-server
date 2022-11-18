@@ -60,15 +60,7 @@ func MetricsNotifier() {
 		for {
 			time.Sleep(DebugMetricsNotifierPeriod * time.Second)
 			log.Debug().
-				Int32("AuthRequests", metrics.Metrics.AuthRequests).
-				Int32("AuthRequestsFailed", metrics.Metrics.AuthRequestsFailed).
-				Int32("AuthRequestsFailedRelay", metrics.Metrics.AuthRequestsFailedRelay).
-				Int32("AuthRequestsFailedLogin", metrics.Metrics.AuthRequestsFailedLogin).
-				Int32("AuthRequestsSuccess", metrics.Metrics.AuthRequestsSuccess).
-				Int32("AuthRequestsSuccessRelay", metrics.Metrics.AuthRequestsSuccessRelay).
-				Int32("AuthRequestsSuccessLogin", metrics.Metrics.AuthRequestsSuccessLogin).
-				Int32("AuthRequestsRelay", metrics.Metrics.AuthRequestsRelay).
-				Int32("AuthRequestsLogin", metrics.Metrics.AuthRequestsLogin).
+				Interface("Entities", metrics.Metrics.Entities).
 				Int32("InternalErrors", metrics.Metrics.InternalErrors).
 				Msg("Metrics")
 		}
