@@ -18,3 +18,5 @@
 *.log
 *.bak
 .*
+
+nginx-mail-auth-http-server
