@@ -8,7 +8,6 @@ Benifits of using nginx as a mail proxy:
 1. You can use multiple upstream servers
 1. Configuration is dynamic
 
-work in progress
 
 ## Workflow Diagram
 
@@ -184,6 +183,14 @@ The Auth Server shold be reachable by nginx.
 }
 ```
 
+## On-fly configuration reload
+
+The application supports hot configuration file reload. Use `SIGUSR1` signal for that.
+
+```bash
+kill -s SIGUSR1 $(pgrep nginx-mail-auth-http-server)
+```
+
 ## Lookup queries
 
 It is required for queries to return two named values: `address` and `port` (of the upstream mail server).
@@ -217,18 +224,17 @@ There is a `/metrics` endpoint with a few things:
 
 ```
 # TYPE AuthRequests counter
-AuthRequests{result="started"} 59203
-AuthRequests{result="fail"} 15483
-AuthRequests{result="fail_relay"} 282
-AuthRequests{result="fail_login"} 8411
-AuthRequests{result="success"} 2694
-AuthRequests{result="success_relay"} 494
-AuthRequests{result="success_login"} 2200
-AuthRequests{kind="relay"} 776
-AuthRequests{kind="login"} 10611
+# HELP Number of events happened in Nginx Mail Auth Server
+AuthRequests{kind="AuthRequestsSuccessLogin"} 3
+AuthRequests{kind="request_index"} 3
+AuthRequests{kind="AuthRequests"} 8
+AuthRequests{kind="AuthRequestsRelay"} 5
+AuthRequests{kind="AuthRequestsSuccess"} 8
+AuthRequests{kind="AuthRequestsSuccessRelay"} 5
+AuthRequests{kind="AuthRequestsLogin"} 3
 
 # TYPE InternalErrors counter
-InternalErrors 52
+InternalErrors 32
 ```
 
 # IPv6 support

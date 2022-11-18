@@ -24,6 +24,8 @@ func ReadConfigurationFile(configPtr string, configuration *ConfigurationStruct)
 			Msgf("Error while loading configuration file '%s'", configPtr)
 	}
 
+	configuration.ConfigFile = configPtr
+
 	log.Debug().Msg("Finished loading configuration file")
 
 }
