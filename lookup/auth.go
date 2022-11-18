@@ -2,6 +2,7 @@ package lookup
 
 import (
 	"bytes"
+	"errors"
 	// "encoding/json"
 	// "flag"
 	// "fmt"
@@ -21,18 +22,63 @@ import (
 	"nginx_auth_server/server/metrics"
 )
 
-func Authenticate(user string, pass string, protocol string, mailFrom string, rcptTo string) (success bool, result authResultStruct, err error) {
+var mailHeaderRegex = regexp.MustCompile(`<(.*?)(\+.*?)?@(.*?)>`)
 
-	result = authResultStruct{}
+func parseEmailAddress(email string) (emailParsed string, emailParts []string, err error) {
 
 	var nonVERPAddress bytes.Buffer
-	var query string
-	var queryParams = QueryParamsStruct{
-		User:     user,
-		Pass:     pass,
-		RcptTo:   "",
-		MailFrom: "",
+
+	emailMatch := mailHeaderRegex.FindStringSubmatch(email)
+
+	log.Debug().
+		Str("email", email).
+		Msgf("Parsing email address")
+
+	if len(emailMatch) == 4 {
+		nonVERPAddress.WriteString(emailMatch[1])
+		nonVERPAddress.WriteString("@")
+		nonVERPAddress.WriteString(emailMatch[3])
+
+		// nonVERPAddress.Reset()
+
+		log.Debug().
+			Str("email", email).
+			Str("emailParsed", nonVERPAddress.String()).
+			Strs("emailMatch", emailMatch).
+			Msgf("Parsed email address")
+
+		return nonVERPAddress.String(), emailMatch, nil
+
+	} else {
+
+		log.Warn().
+			Str("nonVERPAddress", nonVERPAddress.String()).
+			Str("email", email).
+			Msgf("Email address is empty (could be incoming bounce)")
+
+		return "", emailMatch, nil
+
 	}
+
+}
+
+func canRelay(mailFrom string, rcptTo string) bool {
+	if rcptTo != "" {
+		return true
+	} else {
+		return false
+	}
+}
+
+func canAuthenticate(user string, pass string) bool {
+	if user != "" {
+		return true
+	} else {
+		return false
+	}
+}
+
+func Authenticate(user string, pass string, protocol string, mailFrom string, rcptTo string, clientIP string) (success bool, result authResultStruct, err error) {
 
 	log.Info().
 		Str("user", user).
@@ -42,12 +88,18 @@ func Authenticate(user string, pass string, protocol string, mailFrom string, rc
 		Str("rcptTo", rcptTo).
 		Msgf("Processing authentication request")
 
-	if user == "" &&
-		pass == "" &&
-		rcptTo != "" {
+	var queries []string
+	var queryParams = QueryParamsStruct{
+		User:     user,
+		Pass:     pass,
+		RcptTo:   "",
+		MailFrom: "",
+		ClientIP: clientIP,
+	}
 
-		// metrics.Metrics.Inc("AuthRequestsRelay", 1)
+	if canRelay(mailFrom, rcptTo) && !canAuthenticate(user, pass) {
 
+		metrics.Metrics.Inc("AuthRequestsRelay", 1)
 		result.AuthViaRelay = true
 
 		log.Info().
@@ -56,76 +108,62 @@ func Authenticate(user string, pass string, protocol string, mailFrom string, rc
 			Str("rcptTo", rcptTo).
 			Msg("Authenticating by relay access ('user' and 'pass' are empty)")
 
-		mailHeaderRegex := regexp.MustCompile(`<(.*?)(\+.*?)?@(.*?)>`)
-		mailFromEmailMatch := mailHeaderRegex.FindStringSubmatch(mailFrom)
-		rcptToEmailMatch := mailHeaderRegex.FindStringSubmatch(rcptTo)
-
-		if len(mailFromEmailMatch) != 4 {
-			log.Warn().
-				Str("mailFrom", mailFrom).
-				Str("rcptTo", rcptTo).
-				Msgf("MAIL FROM is empty (could be incoming bounce)")
-
-		} else {
-			nonVERPAddress.WriteString(mailFromEmailMatch[1])
-			nonVERPAddress.WriteString("@")
-			nonVERPAddress.WriteString(mailFromEmailMatch[3])
-
-			queryParams.MailFrom = nonVERPAddress.String()
-
-			nonVERPAddress.Reset()
-		}
-
-		if len(rcptToEmailMatch) == 4 {
-
-			nonVERPAddress.WriteString(rcptToEmailMatch[1])
-			nonVERPAddress.WriteString("@")
-			nonVERPAddress.WriteString(rcptToEmailMatch[3])
-
-			queryParams.RcptTo = nonVERPAddress.String()
-
-			log.Debug().
-				Str("rcptToEmailMatch[0]", rcptToEmailMatch[0]).
-				Str("rcptToEmailMatch[1]", rcptToEmailMatch[1]).
-				Str("rcptToEmailMatch[2]", rcptToEmailMatch[2]).
-				Str("rcptToEmailMatch[3]", rcptToEmailMatch[3]).
-				Str("nonVERPAddress.string()", nonVERPAddress.String()).
-				Str("queryParams.RcptTo", queryParams.RcptTo).
-				Str("rcptTo", rcptTo).
-				Msgf("Fetched an email address out of rcptTo header (VERP section stripped)")
-
-			nonVERPAddress.Reset()
-
-		} else {
-
+		queryParams.MailFrom, _, err = parseEmailAddress(mailFrom)
+		if err != nil {
 			metrics.Metrics.Inc("InternalErrors", 1)
-
 			log.Error().
-				Str("rcptTo", rcptTo).
-				Int("rcptToEmailMatchLen", len(rcptToEmailMatch)).
-				Msg("Can't parse MAIL FROM command")
+				Err(err).
+				Str("queryParams.MailFrom", queryParams.MailFrom).
+				Msgf("Error while parsing MailFrom address")
 
 			result.AuthStatus = "Temporary server problem, try again later"
 			result.AuthErrorCode = "451 4.3.0"
 			result.AuthWait = "5"
 
-			return false, result, err
+			return false, result, errors.New("Error while parsing MailFrom address")
+		}
 
+		queryParams.RcptTo, _, err = parseEmailAddress(rcptTo)
+		if err != nil {
+			metrics.Metrics.Inc("InternalErrors", 1)
+			log.Error().
+				Err(err).
+				Str("queryParams.RcptTo", queryParams.RcptTo).
+				Msgf("Error while parsing RcptTo address")
+
+			result.AuthStatus = "Temporary server problem, try again later"
+			result.AuthErrorCode = "451 4.3.0"
+			result.AuthWait = "5"
+
+			return false, result, errors.New("Error while parsing RcptTo address")
+		}
+
+		if queryParams.RcptTo == "" {
+			metrics.Metrics.Inc("InternalErrors", 1)
+			log.Error().
+				Str("rcptTo", rcptTo).
+				Str("queryParams.RcptTo", queryParams.RcptTo).
+				Msg("Can't parse RCPT TO command for relay")
+
+			result.AuthStatus = "Temporary server problem, try again later"
+			result.AuthErrorCode = "451 4.3.0"
+			result.AuthWait = "5"
+
+			return false, result, errors.New("Can't parse RCPT TO command for relay")
 		}
 
 		log.Debug().
-			Str("User", queryParams.User).
-			Str("Pass", WrapSecret(queryParams.Pass)).
-			Str("MailFrom", queryParams.MailFrom).
-			Str("RcptTo", queryParams.RcptTo).
+			Str("MailFrom", mailFrom).
+			Str("RcptTo", rcptTo).
+			Str("queryParams.MailFrom", queryParams.MailFrom).
+			Str("queryParams.RcptTo", queryParams.RcptTo).
 			Msg("Relay lookup query parameters prepared")
 
-		query = configuration.Configuration.Database.RelayLookupQuery[0]
+		queries = configuration.Configuration.Database.RelayLookupQueries
 
-	} else if user != "" {
+	} else if canAuthenticate(user, pass) {
 
 		metrics.Metrics.Inc("AuthRequestsLogin", 1)
-
 		result.AuthViaLogin = true
 
 		log.Info().
@@ -134,9 +172,10 @@ func Authenticate(user string, pass string, protocol string, mailFrom string, rc
 			Str("pass", WrapSecret(pass)).
 			Msg("Authenticating by credentials")
 
-		query = configuration.Configuration.Database.AuthLookupQuery[0]
+		queries = configuration.Configuration.Database.AuthLookupQueries
 
 	} else {
+
 		metrics.Metrics.Inc("InternalErrors", 1)
 
 		log.Error().
@@ -155,68 +194,78 @@ func Authenticate(user string, pass string, protocol string, mailFrom string, rc
 	}
 
 	log.Debug().
-		Str("query", query).
+		Strs("queries", queries).
 		Msg("Lookup query prepared")
 
-	queryResult, err := configuration.Configuration.DB.NamedQuery(query, queryParams)
+	for idx, query := range queries {
 
-	if err != nil {
-
-		metrics.Metrics.Inc("InternalErrors", 1)
-
-		log.Error().Err(err).Msgf("Error while executing query: %v", err)
-
-		result.AuthStatus = "Temporary server problem, try again later"
-		result.AuthErrorCode = "451 4.3.0"
-		result.AuthWait = "5"
-
-		return false, result, err
-	}
-
-	defer queryResult.Close()
-
-	for queryResult.Next() {
 		log.Debug().
-			Str("protocol", protocol).
-			Str("user", WrapSecret(user)).
-			Str("pass", pass).
-			Str("mailFrom", mailFrom).
-			Str("rcptTo", rcptTo).
-			Msgf("Found results after lookup query execution")
+			Int("queryIdx", idx).
+			Str("query", query).
+			Msg("Submitting lookup query")
 
-		var upstream = UpstreamStruct{}
+		queryResult, err := configuration.Configuration.DB.NamedQuery(query, queryParams)
 
-		if err = queryResult.StructScan(&upstream); err != nil {
+		if err != nil {
 
 			metrics.Metrics.Inc("InternalErrors", 1)
 
-			log.Error().Err(err).Msgf("Error while parsing lookup query result")
+			log.Error().Err(err).Msgf("Error while executing query: %v", err)
 
 			result.AuthStatus = "Temporary server problem, try again later"
 			result.AuthErrorCode = "451 4.3.0"
 			result.AuthWait = "5"
 
 			return false, result, err
-
-		} else {
-			log.Debug().Msgf("Lookup query results parsed successfully")
 		}
 
-		log.Info().
-			Str("protocol", protocol).
-			Str("user", user).
-			Str("pass", WrapSecret(pass)).
-			Str("mailFrom", mailFrom).
-			Str("rcptTo", rcptTo).
-			Str("upstreamAddress", upstream.Address).
-			Int("upstreamPort", upstream.Port).
-			Msgf("Found upstream")
+		defer queryResult.Close()
 
-		result.AuthStatus = "OK"
-		result.AuthServer = upstream.Address
-		result.AuthPort = upstream.Port
+		for queryResult.Next() {
+			log.Debug().
+				Str("protocol", protocol).
+				Str("user", WrapSecret(user)).
+				Str("pass", pass).
+				Str("mailFrom", mailFrom).
+				Str("rcptTo", rcptTo).
+				Int("queryIdx", idx).
+				Msgf("Found results after lookup query execution")
 
-		return true, result, nil
+			var upstream = UpstreamStruct{}
+
+			if err = queryResult.StructScan(&upstream); err != nil {
+
+				metrics.Metrics.Inc("InternalErrors", 1)
+				log.Error().Err(err).Msgf("Error while parsing lookup query result")
+
+				result.AuthStatus = "Temporary server problem, try again later"
+				result.AuthErrorCode = "451 4.3.0"
+				result.AuthWait = "5"
+
+				return false, result, err
+
+			} else {
+				log.Debug().Msgf("Lookup query results parsed successfully")
+			}
+
+			log.Info().
+				Str("protocol", protocol).
+				Str("user", user).
+				Str("pass", WrapSecret(pass)).
+				Str("mailFrom", mailFrom).
+				Str("rcptTo", rcptTo).
+				Str("upstreamAddress", upstream.Address).
+				Int("upstreamPort", upstream.Port).
+				Int("queryIdx", idx).
+				Msgf("Found upstream")
+
+			result.AuthStatus = "OK"
+			result.AuthServer = upstream.Address
+			result.AuthPort = upstream.Port
+
+			return true, result, nil
+
+		}
 
 	}
 

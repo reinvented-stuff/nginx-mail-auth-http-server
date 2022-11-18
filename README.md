@@ -172,12 +172,12 @@ The Auth Server shold be reachable by nginx.
     "driver": "mysql",
 		
     "auth_lookup_queries": [
-      "SELECT '127.0.0.1' as address, 25 as port;",
+      "SELECT '127.0.0.1' as address, 25 as port WHERE :User = 'root';",
       "SELECT '127.0.0.1' as address, 10025 as port;",
     ],
 		
     "relay_lookup_queries": [
-      "SELECT '127.0.0.1' as address, 25 as port;"
+      "SELECT '127.0.0.1' as address, 25 as port WHERE :RcptTo = 'nobody';"
       "SELECT '127.0.0.1' as address, 10025 as port;"
     ]
 	}
@@ -194,6 +194,7 @@ You can use the following named parameters in your lookup queries:
 * `:Pass` – Password part of the authentication request (only on AUTH command)
 * `:RcptTo` – RCPT TO command content (if no AUTH command passed)
 * `:MailFrom` – MAIL FROM command content (if no AUTH command passed)
+* `:ClientIP` – Client IP address passed by nginx
 
 Example:
 

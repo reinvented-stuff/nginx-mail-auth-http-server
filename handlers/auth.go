@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/rs/zerolog/log"
 
@@ -38,7 +39,7 @@ func (env *Handlers) Auth(rw http.ResponseWriter, req *http.Request) {
 		Str("event", "auth").
 		Msgf("Incoming auth request")
 
-	success, result, err := lookup.Authenticate(authUser, authPass, authProtocol, authSMTPFrom, authSMTPTo)
+	success, result, err := lookup.Authenticate(authUser, authPass, authProtocol, authSMTPFrom, authSMTPTo, clientIP)
 	if err != nil {
 
 		metrics.Metrics.Inc("InternalErrors", 1)
@@ -62,79 +63,79 @@ func (env *Handlers) Auth(rw http.ResponseWriter, req *http.Request) {
 		Bool("success", success).
 		Msgf("Got result from authentication function")
 
-	// if success {
+	if success {
 
-	// 	log.Debug().
-	// 		Msgf("Registering successful authentication in metrics")
+		log.Debug().
+			Msgf("Registering successful authentication in metrics")
 
-	// 	metrics.Metrics.Inc("AuthRequestsSuccess", 1)
+		metrics.Metrics.Inc("AuthRequestsSuccess", 1)
 
-	// 	if result.AuthViaRelay {
-	// 		metrics.Metrics.Inc("AuthRequestsSuccessRelay", 1)
+		if result.AuthViaRelay {
+			metrics.Metrics.Inc("AuthRequestsSuccessRelay", 1)
 
-	// 	} else if result.AuthViaLogin {
-	// 		metrics.Metrics.Inc("AuthRequestsSuccessLogin", 1)
-	// 	}
+		} else if result.AuthViaLogin {
+			metrics.Metrics.Inc("AuthRequestsSuccessLogin", 1)
+		}
 
-	// 	log.Info().
-	// 		Str("authMethod", authMethod).
-	// 		Str("authUser", authUser).
-	// 		Str("authPass", lookup.WrapSecret(authPass)).
-	// 		Str("authProtocol", authProtocol).
-	// 		Str("authLoginAttempt", authLoginAttempt).
-	// 		Str("clientIP", clientIP).
-	// 		Str("clientHost", clientHost).
-	// 		Str("authSMTPHelo", authSMTPHelo).
-	// 		Str("authSMTPFrom", authSMTPFrom).
-	// 		Str("authSMTPTo", authSMTPTo).
-	// 		Str("event", "auth").
-	// 		Str("AuthStatus", result.AuthStatus).
-	// 		Str("AuthServer", result.AuthServer).
-	// 		Int("AuthPort", result.AuthPort).
-	// 		Str("AuthWait", result.AuthWait).
-	// 		Str("AuthErrorCode", result.AuthErrorCode).
-	// 		Str("event", "auth_ok").
-	// 		Msgf("Successful authentication")
+		log.Info().
+			Str("authMethod", authMethod).
+			Str("authUser", authUser).
+			Str("authPass", lookup.WrapSecret(authPass)).
+			Str("authProtocol", authProtocol).
+			Str("authLoginAttempt", authLoginAttempt).
+			Str("clientIP", clientIP).
+			Str("clientHost", clientHost).
+			Str("authSMTPHelo", authSMTPHelo).
+			Str("authSMTPFrom", authSMTPFrom).
+			Str("authSMTPTo", authSMTPTo).
+			Str("event", "auth").
+			Str("AuthStatus", result.AuthStatus).
+			Str("AuthServer", result.AuthServer).
+			Int("AuthPort", result.AuthPort).
+			Str("AuthWait", result.AuthWait).
+			Str("AuthErrorCode", result.AuthErrorCode).
+			Str("event", "auth_ok").
+			Msgf("Successful authentication")
 
-	// 	rw.Header().Set("Auth-Server", result.AuthServer)
-	// 	rw.Header().Set("Auth-Port", strconv.Itoa(result.AuthPort))
+		rw.Header().Set("Auth-Server", result.AuthServer)
+		rw.Header().Set("Auth-Port", strconv.Itoa(result.AuthPort))
 
-	// } else {
+	} else {
 
-	// 	metrics.Metrics.Inc("AuthRequestsFailed", 1)
+		metrics.Metrics.Inc("AuthRequestsFailed", 1)
 
-	// 	if result.AuthViaRelay {
-	// 		metrics.Metrics.Inc("AuthRequestsFailedRelay", 1)
+		if result.AuthViaRelay {
+			metrics.Metrics.Inc("AuthRequestsFailedRelay", 1)
 
-	// 	} else if result.AuthViaLogin {
-	// 		metrics.Metrics.Inc("AuthRequestsFailedLogin", 1)
-	// 	}
+		} else if result.AuthViaLogin {
+			metrics.Metrics.Inc("AuthRequestsFailedLogin", 1)
+		}
 
-	// 	log.Info().
-	// 		Str("authMethod", authMethod).
-	// 		Str("authUser", authUser).
-	// 		Str("authPass", lookup.WrapSecret(authPass)).
-	// 		Str("authProtocol", authProtocol).
-	// 		Str("authLoginAttempt", authLoginAttempt).
-	// 		Str("clientIP", clientIP).
-	// 		Str("clientHost", clientHost).
-	// 		Str("authSMTPHelo", authSMTPHelo).
-	// 		Str("authSMTPFrom", authSMTPFrom).
-	// 		Str("authSMTPTo", authSMTPTo).
-	// 		Str("event", "auth").
-	// 		Str("AuthStatus", result.AuthStatus).
-	// 		Str("AuthServer", result.AuthServer).
-	// 		Int("AuthPort", result.AuthPort).
-	// 		Str("AuthWait", result.AuthWait).
-	// 		Str("AuthErrorCode", result.AuthErrorCode).
-	// 		Str("event", "auth_failed").
-	// 		Msgf("Failed to authenticate")
+		log.Info().
+			Str("authMethod", authMethod).
+			Str("authUser", authUser).
+			Str("authPass", lookup.WrapSecret(authPass)).
+			Str("authProtocol", authProtocol).
+			Str("authLoginAttempt", authLoginAttempt).
+			Str("clientIP", clientIP).
+			Str("clientHost", clientHost).
+			Str("authSMTPHelo", authSMTPHelo).
+			Str("authSMTPFrom", authSMTPFrom).
+			Str("authSMTPTo", authSMTPTo).
+			Str("event", "auth").
+			Str("AuthStatus", result.AuthStatus).
+			Str("AuthServer", result.AuthServer).
+			Int("AuthPort", result.AuthPort).
+			Str("AuthWait", result.AuthWait).
+			Str("AuthErrorCode", result.AuthErrorCode).
+			Str("event", "auth_failed").
+			Msgf("Failed to authenticate")
 
-	// 	rw.Header().Set("Auth-Wait", result.AuthWait)
+		rw.Header().Set("Auth-Wait", result.AuthWait)
 
-	// 	if result.AuthErrorCode != "" {
-	// 		rw.Header().Set("Auth-Error-Code", result.AuthErrorCode)
-	// 	}
-	// }
+		if result.AuthErrorCode != "" {
+			rw.Header().Set("Auth-Error-Code", result.AuthErrorCode)
+		}
+	}
 
 }

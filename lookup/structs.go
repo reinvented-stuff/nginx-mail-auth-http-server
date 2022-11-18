@@ -27,4 +27,5 @@ type QueryParamsStruct struct {
 	Pass     string `db:"Pass"`
 	RcptTo   string `db:"RcptTo"`
 	MailFrom string `db:"MailFrom"`
+	ClientIP string `db:"ClientIP"`
 }
