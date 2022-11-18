@@ -226,7 +226,7 @@ There is a `/metrics` endpoint with a few things:
 # TYPE AuthRequests counter
 # HELP Number of events happened in Nginx Mail Auth Server
 AuthRequests{kind="AuthRequestsSuccessLogin"} 3
-AuthRequests{kind="request_index"} 3
+AuthRequests{kind="RequestIndex"} 3
 AuthRequests{kind="AuthRequests"} 8
 AuthRequests{kind="AuthRequestsRelay"} 5
 AuthRequests{kind="AuthRequestsSuccess"} 8
