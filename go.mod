@@ -1,11 +1,14 @@
-module nginx-mail-auth-http-server
+module nginx_auth_server/server
 
 go 1.18
 
 require (
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/jmoiron/sqlx v1.3.5
-	github.com/rs/zerolog v1.27.0
+	github.com/lib/pq v1.10.7
+	github.com/rs/zerolog v1.28.0
+	github.com/sony/sonyflake v1.1.0
+	golang.org/x/sync v0.1.0
 )
 
 require (

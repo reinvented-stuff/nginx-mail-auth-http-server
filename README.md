@@ -169,8 +169,17 @@ The Auth Server shold be reachable by nginx.
 	"listen": "127.0.0.1:8080",
 	"database": {
 		"uri": "mysqluser:mysqlpass@tcp(127.0.0.1:3306)/postfix",
-		"auth_lookup_query": "SELECT '127.0.0.1' as address, 25 as port;",
-		"relay_lookup_query": "SELECT '127.0.0.1' as address, 25 as port;"
+    "driver": "mysql",
+		
+    "auth_lookup_queries": [
+      "SELECT '127.0.0.1' as address, 25 as port WHERE :User = 'root';",
+      "SELECT '127.0.0.1' as address, 10025 as port;",
+    ],
+		
+    "relay_lookup_queries": [
+      "SELECT '127.0.0.1' as address, 25 as port WHERE :RcptTo = 'nobody';"
+      "SELECT '127.0.0.1' as address, 10025 as port;"
+    ]
 	}
 }
 ```
@@ -185,6 +194,7 @@ You can use the following named parameters in your lookup queries:
 * `:Pass` – Password part of the authentication request (only on AUTH command)
 * `:RcptTo` – RCPT TO command content (if no AUTH command passed)
 * `:MailFrom` – MAIL FROM command content (if no AUTH command passed)
+* `:ClientIP` – Client IP address passed by nginx
 
 Example:
 
@@ -221,32 +231,6 @@ AuthRequests{kind="login"} 10611
 InternalErrors 52
 ```
 
-# SSL/TLS support
-
-Generate self-signed certificate:
-```bash
-openssl req -x509 \
-  -newkey rsa:4096 \
-  -subj '/CN=localhost' \
-  -nodes \
-  -keyout localhost.key \
-  -out localhost.crt \
-  -sha256 \
-  -days 9365
-```
-
-Add to the configuration file the following section:
-```json
-{
-  ...
-  "ssl": {
-    "certificate": "localhost.crt",
-    "private_key": "localhost.key"
-  }
-}
-```
-
-
 # IPv6 support
 
 To be done.
@@ -267,7 +251,7 @@ curl -v -k \
  -H "Auth-SMTP-Helo: pepes_workstation" \
  -H "Auth-SMTP-From: MAIL FROM:<pepe@example.com>" \
  -H "Auth-SMTP-To: RCPT TO:<mario@example.com>" \
- https://127.0.0.1:8443/auth
+ http://127.0.0.1:8080/auth
 ```
 
 Request authentication via relay:
@@ -281,5 +265,5 @@ curl -v -k \
  -H "Auth-SMTP-Helo: pepes_workstation" \
  -H "Auth-SMTP-From: MAIL FROM:<pepe@example.com>" \
  -H "Auth-SMTP-To: RCPT TO:<mario@example.com>" \
- https://127.0.0.1:8443/auth
+ http://127.0.0.1:8080/auth
 ```

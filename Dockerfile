@@ -15,7 +15,7 @@ RUN apk add git
 RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.BuildVersion=${BUILD_VERSION}'" -v -o nginx-mail-auth-http-server .
 
 
-FROM alpine:3.15
+FROM alpine:3.16
 
 COPY --from=builder /src/nginx-mail-auth-http-server nginx-mail-auth-http-server
 

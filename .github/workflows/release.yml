@@ -12,12 +12,12 @@ jobs:
     name: Validate new version
     runs-on: ubuntu-latest
     outputs:
-      planned_version: ${{ steps.planned_version.outputs.planned_version }}
-      tag_hash: ${{ steps.lookup_tag.outputs.tag_hash }}
-      can_create: ${{ steps.can_create.outputs.can_create }}
-      tag_exists: ${{ steps.can_create.outputs.tag_exists }}
-      branch_name: ${{ steps.get_branch_name.outputs.branch_name }}
-      job_status: ${{ job.status }}
+      planned_version: ${{ steps.validate_new_version.outputs.planned_version }}
+      version_file_exists: ${{ steps.validate_new_version.outputs.version_file_exists }}
+      tag_hash: ${{ steps.validate_new_version.outputs.tag_hash }}
+      can_create: ${{ steps.validate_new_version.outputs.can_create }}
+      tag_exists: ${{ steps.validate_new_version.outputs.tag_exists }}
+      branch_name: ${{ steps.validate_new_version.outputs.branch_name }}
 
     steps:
 
@@ -26,45 +26,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get trigger branch name
-        id: get_branch_name
-        shell: bash
-        run: |
-          echo "::set-output name=branch_name::${GITHUB_REF#refs/heads/}"
+      - name: Use latest released action
+        id: validate_new_version
+        uses: reinvented-stuff/validate-version-action@master
+        with:
+          version_filename: ".version"
+          github_token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Check if .version file exists
-        id: version_file_exists
-        run: |
-          if [[ -f .version ]]; then 
-            echo "::set-output name=version_file_exists::true"
-          else 
-            echo "::set-output name=version_file_exists::false" 
-          fi
+      - name: Fail if version already exists
+        id: fail_on_duplicate_version
+        if: steps.validate_new_version.outputs.can_create != 'true'
+        run: exit 2
 
-      - name: Read out .version file
-        if: steps.version_file_exists.outputs.version_file_exists == 'true'
-        id: planned_version
-        run: echo "::set-output name=planned_version::$(cat .version)"
-
-      - name: Display planned version
-        id: display_planned_version
-        run: |
-          echo "::debug::Planned version: ${{ steps.planned_version.outputs.planned_version }}"
-
-      - name: Lookup planned tag
-        id: lookup_tag
-        run: |
-          URL="https://api.github.com/repos/${{ github.repository }}/git/refs/tags/${{ steps.planned_version.outputs.planned_version }}"
-          OUTFILE=".tag_hash"
-          curl -s -X GET -H 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' --url "${URL}" | jq .object.sha | tee "${OUTFILE}"
-          echo "::set-output name=tag_hash::$(cat "${OUTFILE}")"
-      
-      - name: Define if can create a new version
-        id: can_create
-        if: steps.lookup_tag.outputs.tag_hash == 'null'
-        run: |
-          echo "::set-output name=tag_exists::false"
-          echo "::set-output name=can_create::true"
 
   build_and_test:
     name: Build, Test
@@ -182,6 +155,23 @@ jobs:
           
           docker push "docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}"
           docker push "quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}" 
+
+
+      - name: Notify about build
+        uses: rest-gateway/notification-action@master
+        with:
+          message: |
+            <b>Build ${{env.APP_NAME}}:</b> ${{env.PLANNED_VERSION}}${{ steps.version_suffix.outputs.long }}
+
+            <b>Docker image:</b>
+            docker.pkg.github.com/${GITHUB_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}
+            quay.io/${QUAYIO_IMAGE_ID}:${PLANNED_VERSION}${{ steps.version_suffix.outputs.long }}
+
+          recipient: "${{ secrets.NOTIFICATIONS_DEFAULT_RECIPIENT }}"
+          rest_gateway_url: "${{ secrets.REST_GATEWAY_API_URL }}"
+          rest_gateway_token: "${{ secrets.REST_GATEWAY_TOKEN }}"
+          rest_gateway_bot_name: "${{ secrets.REST_GATEWAY_BOT_NAME }}"
+
 
   release:
     name: Release
@@ -533,3 +523,11 @@ jobs:
       #       "${{steps.verify_deb_package.outputs.path_to_deb_file}}" \
       #       ${{ secrets.RSYNC_USERNAME }}@${{ secrets.RSYNC_HOSTNAME }}::${{ secrets.RSYNC_PATH_DEB }}
 
+      - name: Send out notification about release
+        uses: rest-gateway/notification-action@master
+        with:
+          message: "Release ${{env.PLANNED_VERSION}} happened for <b>${{env.APP_NAME}}</b>. Yay."
+          recipient: "${{ secrets.NOTIFICATIONS_DEFAULT_RECIPIENT }}"
+          rest_gateway_url: "${{ secrets.REST_GATEWAY_API_URL }}"
+          rest_gateway_token: "${{ secrets.REST_GATEWAY_TOKEN }}"
+          rest_gateway_bot_name: "${{ secrets.REST_GATEWAY_BOT_NAME }}"
