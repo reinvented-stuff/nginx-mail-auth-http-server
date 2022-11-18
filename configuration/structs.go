@@ -26,6 +26,7 @@ type ConfigurationStruct struct {
 	Flake                  sonyflake.Sonyflake   ``
 	ApplicationDescription string                ``
 	BuildVersion           string                ``
+	ConfigFile             string                ``
 }
 
 var Configuration = ConfigurationStruct{}

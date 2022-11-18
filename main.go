@@ -79,12 +79,15 @@ func handleSignal() {
 
 	log.Debug().Msg("Initialising signal handling function")
 
-	signalChannel := make(chan os.Signal)
-	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
+	signalChannelSIGTERM := make(chan os.Signal)
+	signal.Notify(signalChannelSIGTERM, os.Interrupt, syscall.SIGTERM)
+
+	signalChannelSIGUSR1 := make(chan os.Signal)
+	signal.Notify(signalChannelSIGUSR1, syscall.SIGUSR1)
 
 	go func() {
 
-		<-signalChannel
+		<-signalChannelSIGTERM
 
 		err := handleSignalParams.httpServer.Shutdown(context.Background())
 		defer handleSignalParams.db.Close()
@@ -100,6 +103,37 @@ func handleSignal() {
 		os.Exit(0)
 
 	}()
+
+	go func() {
+		for {
+			<-signalChannelSIGUSR1
+
+			log.Warn().Msg("SIGUSR1")
+
+			configuration.ReadConfigurationFile(configuration.Configuration.ConfigFile, &configuration.Configuration)
+			log.Info().Msgf("Configuration file reload complete")
+
+			log.Info().Msg("Re-initialising database connection")
+			DB = initDBConnection(configuration.Configuration.Database.URI, configuration.Configuration.Database.Driver)
+
+			handleSignalParams.db = DB
+			httpHandlers.DB = DB
+			configuration.Configuration.DB = DB
+		}
+	}()
+}
+
+func initDBConnection(uri string, driver string) (db *sqlx.DB) {
+
+	log.Debug().Msg("Initialising database connection")
+
+	db, err := sqlx.Open(driver, uri)
+	if err != nil {
+		log.Fatal().Msgf("Error while initialising db: %v", err)
+	}
+
+	return db
+
 }
 
 func init() {
@@ -145,13 +179,8 @@ func init() {
 	handleSignal()
 
 	log.Debug().Msg("Initialising database connection")
-	mysqlConnectionURI := configuration.Configuration.Database.URI
-	db, err := sqlx.Open(configuration.Configuration.Database.Driver, mysqlConnectionURI)
-	if err != nil {
-		log.Fatal().Msgf("Error while initialising db: %v", err)
-	}
+	DB = initDBConnection(configuration.Configuration.Database.URI, configuration.Configuration.Database.Driver)
 
-	DB = db
 	handleSignalParams.db = DB
 	httpHandlers.DB = DB
 	configuration.Configuration.DB = DB
