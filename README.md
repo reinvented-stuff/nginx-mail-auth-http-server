@@ -1,17 +1,18 @@
 # Nginx Mail Auth Server
 
-Nginx Mail Auth HTTP Server provides an auth service for [Nginx Mail](https://nginx.org/en/docs/mail/ngx_mail_core_module.html) module.
+Nginx Mail Auth HTTP Server provides an auth service
+for [Nginx Mail](https://nginx.org/en/docs/mail/ngx_mail_core_module.html) module.
 
 Benifits of using nginx as a mail proxy:
+
 1. Nginx is fast and thin
 1. You can do load balancing
 1. You can use multiple upstream servers
 1. Configuration is dynamic
 
-
 ## Workflow Diagram
 
-```
+```text
 
       +-------------+           +---------------+          +--------------+
       |             |           |               |          |              |
@@ -34,7 +35,7 @@ Benifits of using nginx as a mail proxy:
 
 ## Run as binary
 
-```
+```text
 ./nginx-mail-auth-http-server -h
 Usage of ./nginx-mail-auth-http-server:
   -config string
@@ -51,7 +52,9 @@ Usage of ./nginx-mail-auth-http-server:
 
 We currently publish docker images on [github](https://github.com/reinvented-stuff/nginx-mail-auth-http-server/packages/586191) and [quay.io](https://quay.io/repository/reinventedstuff/nginx-mail-auth-http-server).
 
-In order to pull any images from there you need to have a personal github token. Please, refer to the official documantation: https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token#creating-a-token
+In order to pull any images from there you need to have a personal github token.
+Please, refer to the official documantation:
+[https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token#creating-a-token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token#creating-a-token)
 
 ```bash
 docker run \
@@ -83,14 +86,14 @@ nginx should be listening on 25/tcp port of your mail server.
 
 ## nginx.conf
 
-```
+```nginx
 user nginx;
 worker_processes auto;
 
 ...
 
 http {
-	...
+    ...
 }
 
 mail {
@@ -137,15 +140,15 @@ inet_interfaces = localhost
 mynetworks = 127.0.0.0/8
 smtpd_authorized_xclient_hosts = 127.0.0.0/8
 smtpd_recipient_restrictions =
-	permit_mynetworks,
-	...
+    permit_mynetworks,
+    ...
 ```
 
 ### master.cf
 
 To make postfix listen on a custom port you can comment out the default `smtp ...` line and add a new one as proposed below.
 
-```
+```text
 # ==========================================================================
 # service type  private unpriv  chroot  wakeup  maxproc command + args
 #               (yes)   (yes)   (no)    (never) (100)
@@ -165,21 +168,21 @@ The Auth Server shold be reachable by nginx.
 
 ```json
 {
-	"listen": "127.0.0.1:8080",
-	"database": {
-		"uri": "mysqluser:mysqlpass@tcp(127.0.0.1:3306)/postfix",
+    "listen": "127.0.0.1:8080",
+    "database": {
+        "uri": "mysqluser:mysqlpass@tcp(127.0.0.1:3306)/postfix",
     "driver": "mysql",
-		
+        
     "auth_lookup_queries": [
       "SELECT '127.0.0.1' as address, 25 as port WHERE :User = 'root';",
       "SELECT '127.0.0.1' as address, 10025 as port;",
     ],
-		
+        
     "relay_lookup_queries": [
       "SELECT '127.0.0.1' as address, 25 as port WHERE :RcptTo = 'nobody';"
       "SELECT '127.0.0.1' as address, 10025 as port;"
     ]
-	}
+    }
 }
 ```
 
@@ -222,7 +225,7 @@ Grafana dashboard: [https://grafana.com/grafana/dashboards/16427](https://grafan
 
 There is a `/metrics` endpoint with a few things:
 
-```
+```prometheus
 # TYPE AuthRequests counter
 # HELP Number of events happened in Nginx Mail Auth Server
 AuthRequests{kind="AuthRequestsSuccessLogin"} 3
@@ -245,6 +248,7 @@ To be done.
 # Test
 
 Request authentication with login and password:
+
 ```bash
 curl -v -k \
  -H "Auth-Method: none" \
@@ -261,6 +265,7 @@ curl -v -k \
 ```
 
 Request authentication via relay:
+
 ```bash
 curl -v -k \
  -H "Auth-Method: none" \
