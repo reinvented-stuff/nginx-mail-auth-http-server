@@ -244,7 +244,6 @@ InternalErrors 32
 
 To be done.
 
-
 # Test
 
 Request authentication with login and password:
