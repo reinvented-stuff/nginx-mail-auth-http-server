@@ -1,4 +1,3 @@
-
 # Nginx Mail Auth Server
 
 Nginx Mail Auth HTTP Server provides an auth service
