@@ -158,12 +158,12 @@ func init() {
 
 	configuration.ReadConfigurationFile(*configPtr, &configuration.Configuration)
 
-	listen_address, err := net.ResolveTCPAddr("tcp4", configuration.Configuration.ListenAddress)
+	listenAddress, err := net.ResolveTCPAddr("tcp4", configuration.Configuration.ListenAddress)
 	if err != nil {
 		log.Fatal().Err(err).Msgf("Error while resolving listen address")
 	}
 
-	configuration.Configuration.ListenNetTCPAddr = listen_address
+	configuration.Configuration.ListenNetTCPAddr = listenAddress
 
 	configuration.Configuration.ApplicationDescription = ApplicationDescription
 	configuration.Configuration.BuildVersion = BuildVersion
