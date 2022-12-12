@@ -9,7 +9,7 @@ ARG LISTEN_PORT="8080"
 
 RUN mkdir -p -v /src
 WORKDIR /src
-ADD . /src
+COPY . /src
 
 RUN apk add git
 RUN GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -ldflags="-X 'main.BuildVersion=${BUILD_VERSION}'" -v -o nginx-mail-auth-http-server .
