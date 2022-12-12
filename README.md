@@ -1,6 +1,6 @@
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=reinvented-stuff_nginx-mail-auth-http-server&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=reinvented-stuff_nginx-mail-auth-http-server)
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=reinvented-stuff_nginx-mail-auth-http-server&metric=bugs)](https://sonarcloud.io/summary/new_code?id=reinvented-stuff_nginx-mail-auth-http-server)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/ce53b5588f004254be32426b09162eb3)](https://www.codacy.com/gh/reinvented-stuff/nginx-mail-auth-http-server/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=reinvented-stuff/nginx-mail-auth-http-server&amp;utm_campaign=Badge_Grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/ce53b5588f004254be32426b09162eb3)](https://www.codacy.com/gh/reinvented-stuff/nginx-mail-auth-http-server/dashboard)
 
 
 # Nginx Mail Auth Server
